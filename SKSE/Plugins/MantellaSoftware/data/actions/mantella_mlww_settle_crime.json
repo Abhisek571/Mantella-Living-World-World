@@ -1,0 +1,33 @@
+{
+    "identifier": "mantella_mlww_settle_crime",
+    "name": "SettleCrime",
+    "description": "Settle the player's non-violent bounty in your hold: pay it, take a bribe, or let it go when persuaded.",
+    "note": "Needs Mantella Living World - World. Turn off Mantella's own AbsolveCrime and ReportCrime.",
+    "key": "SettleCrime",
+    "enabled": true,
+    "lw_gate": "guard",
+    "parameters": {
+        "method": {
+            "type": "string",
+            "enum": [
+                "pay",
+                "bribe",
+                "persuade"
+            ],
+            "description": "pay: the player pays the bounty; bribe: the player pays you extra to forget it; persuade: you let a minor bounty go."
+        }
+    },
+    "required": [
+        "method"
+    ],
+    "prompt": "If you are a guard, steward or Jarl and agree to settle the player's bounty (paid, bribed or persuaded), begin your response with '{key}:'",
+    "allowed_games": [
+        "skyrim"
+    ],
+    "requires_response": true,
+    "is-interrupting": false,
+    "allow_repeat": false,
+    "one-on-one": true,
+    "multi-npc": true,
+    "radiant": false
+}

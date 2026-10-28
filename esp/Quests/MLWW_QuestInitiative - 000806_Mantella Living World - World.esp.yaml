@@ -1,0 +1,31 @@
+FormKey: 000806:Mantella Living World - World.esp
+EditorID: MLWW_QuestInitiative
+VirtualMachineAdapter:
+  Scripts:
+  - Name: MLWW_Initiative
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PlayerRef
+      Object: 000014:Skyrim.esm
+    - MutagenObjectType: ScriptObjectProperty
+      Name: MLWW_InitiativeOn
+      Object: 000812:Mantella Living World - World.esp
+  FileName: ''
+  Aliases:
+  - Property:
+      Name: ''
+      Object: 000806:Mantella Living World - World.esp
+      Alias: 0
+    Scripts:
+    - Name: MLWW_PlayerAlias
+Name:
+  TargetLanguage: English
+  Value: Mantella Living World - World initiative
+Flags:
+- StartGameEnabled
+NextAliasID: 1
+Aliases:
+- Name: PlayerAlias
+  Flags: []
+  ForcedReference: 000014:Skyrim.esm
+  VoiceTypes: Null

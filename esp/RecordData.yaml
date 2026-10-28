@@ -1,0 +1,10 @@
+ModKey: Mantella Living World - World.esp
+GameRelease: SkyrimSE
+ModHeader:
+  Flags:
+  - Small
+  Author: itsPigeon2000
+  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk.
+  MasterReferences:
+  - Master: Skyrim.esm
+    FileSize: 0

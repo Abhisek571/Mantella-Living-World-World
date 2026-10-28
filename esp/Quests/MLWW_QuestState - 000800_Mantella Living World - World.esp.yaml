@@ -1,0 +1,28 @@
+FormKey: 000800:Mantella Living World - World.esp
+EditorID: MLWW_QuestState
+VirtualMachineAdapter:
+  Scripts:
+  - Name: MLWW_State
+    Properties:
+    - MutagenObjectType: ScriptObjectProperty
+      Name: PlayerRef
+      Object: 000014:Skyrim.esm
+  FileName: ''
+  Aliases:
+  - Property:
+      Name: ''
+      Object: 000800:Mantella Living World - World.esp
+      Alias: 0
+    Scripts:
+    - Name: MLWW_PlayerAlias
+Name:
+  TargetLanguage: English
+  Value: Mantella Living World - World state
+Flags:
+- StartGameEnabled
+NextAliasID: 1
+Aliases:
+- Name: PlayerAlias
+  Flags: []
+  ForcedReference: 000014:Skyrim.esm
+  VoiceTypes: Null
