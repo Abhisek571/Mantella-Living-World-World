@@ -12,7 +12,7 @@
   "Hjaalmarch",
   "Winterhold"
  ],
- "count": 40,
+ "count": 41,
  "rows": [
   {
    "id": "mq101_helgen",
@@ -214,9 +214,41 @@
    "form": 260630,
    "form_hex": "0x03FA16",
    "when": {
-    "type": "completed"
+    "type": "dead",
+    "form": 247165,
+    "plugin": "Skyrim.esm"
    },
    "text": "{player} killed Paarthurnax at the Blades' demand.",
+   "audience": {
+    "factions": [
+     "Greybeards",
+     "Blades"
+    ]
+   },
+   "fame": 0,
+   "hold": "Rift",
+   "category": "main"
+  },
+  {
+   "id": "mq_paarthurnax_spared",
+   "quest": "MQPaarthurnax",
+   "plugin": "Skyrim.esm",
+   "form": 260630,
+   "form_hex": "0x03FA16",
+   "when": {
+    "type": "all",
+    "of": [
+     {
+      "type": "completed"
+     },
+     {
+      "type": "alive",
+      "form": 247165,
+      "plugin": "Skyrim.esm"
+     }
+    ]
+   },
+   "text": "{player} spared Paarthurnax and talked the Blades into letting him live.",
    "audience": {
     "factions": [
      "Greybeards",
@@ -525,7 +557,8 @@
    "form": 125521,
    "form_hex": "0x01EA51",
    "when": {
-    "type": "completed"
+    "type": "stage",
+    "stage": 200
    },
    "text": "{player} joined the Dark Brotherhood.",
    "audience": {

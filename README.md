@@ -11,15 +11,15 @@ What's happening in Skyrim and what you've done, told to Mantella NPCs. A module
 | Who knows whom | In group talks, one line per pair: strangers, know of, acquainted, close |
 | Party banter | Party members (followers set as teammates, for example with NFF) react to a voiced line nearby, to you entering an inn and to the end of a fight you were hit in. Needs a party member and the Hub's pacing limits apply (banter every 2 minutes at most). A banter talk ends after 45 seconds |
 | Initiative | An NPC with a reason walks up to you and starts a talk. This needs another module that gives NPCs a reason, such as Mantella Living World - Missives. Wait 10 minutes between approaches. Switch it off with "Come over to talk" |
-| SettleCrime | Guards settle a non-violent bounty: pay (asks you Yes/No first), bribe (1.5 times the bounty, down to 1 times with Speech 100; you keep the stolen goods) or persuade (100 gold or less, once a day per hold). Thanes and well-known players (fame 5 or more) get a bounty of 40 gold or less waived. Violent crime is never cleared. Bribe and persuade need Mantella's Advanced Actions on; without it a guard can only take payment |
-| ReportCrime | Guards add a bounty only when another NPC is present in the talk as a witness. Needs Advanced Actions on (it picks the crime) |
+| SettleCrime | Guards settle a non-violent bounty: pay (asks you Yes/No first), bribe (asks you Yes/No first; 1.5 times the bounty, down to 1 times with Speech 100; you keep the stolen goods) or persuade (100 gold or less, once a day per hold). Thanes and well-known players (fame 5 or more) get a bounty of 40 gold or less waived. Violent crime is never cleared. Bribe and persuade need Mantella's Advanced Actions on; without it a guard can only take payment |
+| ReportWitnessedCrime | Guards add a bounty only when another NPC (not one of your followers) is present in the talk as a witness. Each crime counts once per talk, and reports add at most the vanilla bounty for that crime per hold each day (trespassing or lockpicking 5, pickpocketing 25, theft 50, assault 40, murder 1000). Needs Advanced Actions on (it picks the crime) |
 
-Turn off Mantella's own AbsolveCrime and ReportCrime actions (both are off by default).
+Turn off Mantella's own AbsolveCrime action (off by default). Mantella's own ReportCrime is a separate action with a different name; keep it off as well (also off by default). Turning it off does not affect ReportWitnessedCrime.
 
 Requires:
 - Mantella Living World - Integration Hub
 - [Mantella](https://www.nexusmods.com/skyrimspecialedition/mods/98631) 0.14 with [Mantella - Direct AI Connect](https://github.com/Abhisek571/Mantella-Anthropic-API), which the Hub extension and guard-only actions need
-- Advanced Actions on in Mantella (Actions tab of its settings) for bribe, persuade and ReportCrime
+- Advanced Actions on in Mantella (Actions tab of its settings) for bribe, persuade and ReportWitnessedCrime
 - SKSE and [PapyrusUtil SE](https://www.nexusmods.com/skyrimspecialedition/mods/13048)
 - [Papyrus MessageBox - SKSE NG](https://www.nexusmods.com/skyrimspecialedition/mods/83578)
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)

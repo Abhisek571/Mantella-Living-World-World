@@ -208,16 +208,24 @@ bool Function RowTrue(string asRow, string[] akIds, bool[] akTruth, int aiIndex)
 	EndWhile
 	Quest q = Game.GetFormFromFile(JsonUtil.GetPathIntValue(OUTCOMES, asRow + ".form"), JsonUtil.GetPathStringValue(OUTCOMES, asRow + ".plugin")) as Quest
 	string when = asRow + ".when"
-	If JsonUtil.GetPathStringValue(OUTCOMES, when + ".type") == "any"
+	string kind = JsonUtil.GetPathStringValue(OUTCOMES, when + ".type")
+	If kind == "any" || kind == "all"
+		bool needAll = kind == "all"
 		int k = 0
 		int count = JsonUtil.PathCount(OUTCOMES, when + ".of")
+		If count <= 0
+			Return false
+		EndIf
 		While k < count
-			If Condition(when + ".of[" + k + "]", q)
+			bool ok = Condition(when + ".of[" + k + "]", q)
+			If ok && !needAll
 				Return true
+			ElseIf !ok && needAll
+				Return false
 			EndIf
 			k += 1
 		EndWhile
-		Return false
+		Return needAll
 	EndIf
 	Return Condition(when, q)
 EndFunction
@@ -228,9 +236,12 @@ bool Function Condition(string asPath, Quest akQuest)
 		Return akQuest && akQuest.IsCompleted()
 	ElseIf kind == "stage"
 		Return akQuest && akQuest.GetStageDone(JsonUtil.GetPathIntValue(OUTCOMES, asPath + ".stage"))
-	ElseIf kind == "dead"
+	ElseIf kind == "dead" || kind == "alive"
 		Actor who = Game.GetFormFromFile(JsonUtil.GetPathIntValue(OUTCOMES, asPath + ".form"), JsonUtil.GetPathStringValue(OUTCOMES, asPath + ".plugin")) as Actor
-		Return who && who.IsDead()
+		If !who
+			Return false
+		EndIf
+		Return who.IsDead() == (kind == "dead")
 	EndIf
 	Return false
 EndFunction

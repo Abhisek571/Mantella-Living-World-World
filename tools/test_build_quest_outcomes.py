@@ -4,7 +4,7 @@ import json, os, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_quest_outcomes as B
 
-CONDITIONS = {'completed', 'stage', 'any', 'dead'}
+CONDITIONS = {'completed', 'stage', 'any', 'all', 'dead', 'alive'}
 
 
 def fake_qjo(entries, types=None):
@@ -29,12 +29,12 @@ def check_condition(c):
     assert c.get('type') in CONDITIONS, c
     if c['type'] == 'stage':
         assert isinstance(c.get('stage'), int) and c['stage'] >= 0, c
-    if c['type'] == 'any':
+    if c['type'] in ('any', 'all'):
         assert c.get('of'), c
         for sub in c['of']:
-            assert sub.get('type') in CONDITIONS - {'any'}, sub
+            assert sub.get('type') in CONDITIONS - {'any', 'all'}, sub
             check_condition(sub)
-    if c['type'] == 'dead':
+    if c['type'] in ('dead', 'alive'):
         assert isinstance(c.get('form'), int) and c.get('plugin'), c
 
 
@@ -124,6 +124,15 @@ def test_sets_feed_world_state():
     assert stages == sorted(stages)
     thane = {r['hold'] for r in rows if r['category'] == 'thane' and r['hold']}
     assert thane == set(B.HOLDS)
+
+
+def test_completion_is_not_death():
+    # The Paarthurnax Dilemma completes MQPaarthurnax with him alive; killing Astrid ends DB02 at stage 220.
+    by_id = {r['id']: r for r in built()['rows']}
+    assert by_id['mq_paarthurnax_dead']['when'] == {'type': 'dead', 'form': 0x03C57D, 'plugin': 'Skyrim.esm'}
+    spared = by_id['mq_paarthurnax_spared']['when']
+    assert spared['type'] == 'all' and {c['type'] for c in spared['of']} == {'completed', 'alive'}
+    assert by_id['db02_brotherhood']['when'] == {'type': 'stage', 'stage': 200}
 
 
 def test_write_is_valid_json():

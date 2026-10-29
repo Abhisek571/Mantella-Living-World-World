@@ -45,7 +45,7 @@ write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n 
       '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n')
 write('esp/spriggit-meta.json', json.dumps({'PackageName': 'Spriggit.Yaml.Skyrim', 'Version': '0.40.0', 'Release': 'SkyrimSE', 'ModKey': E}, indent=2))
 
-NOTE = "Needs Mantella Living World - World. Turn off Mantella's own AbsolveCrime and ReportCrime."
+NOTE = "Needs Mantella Living World - World. Turn off Mantella's own AbsolveCrime and ReportCrime (separate actions from SettleCrime and ReportWitnessedCrime)."
 ACTIONS = [
     {'identifier': 'mantella_mlww_settle_crime', 'name': 'SettleCrime',
      'description': "Settle the player's non-violent bounty in your hold: pay it, take a bribe, or let it go when persuaded.",
@@ -54,9 +54,10 @@ ACTIONS = [
                                'description': 'pay: the player pays the bounty; bribe: the player pays you extra to forget it; persuade: you let a minor bounty go.'}},
      'required': ['method'],
      'prompt': "If you are a guard, steward or Jarl and agree to settle the player's bounty (paid, bribed or persuaded), begin your response with '{key}:'"},
-    {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportCrime',
+    # Not "ReportCrime": Mantella's Disabled Actions matches by name, and its own ReportCrime is disabled by default.
+    {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportWitnessedCrime',
      'description': 'Add a bounty for a crime a witness in this conversation saw the player commit.',
-     'key': 'ReportCrime',
+     'key': 'ReportWitnessedCrime',
      'parameters': {'crime': {'type': 'string', 'enum': ['trespassing', 'lockpicking', 'pickpocketing', 'theft', 'assault', 'murder'],
                               'description': 'The crime the witness saw.'}},
      'required': ['crime'],

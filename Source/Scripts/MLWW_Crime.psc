@@ -1,15 +1,18 @@
 Scriptname MLWW_Crime extends MLWW_Job
 {Mantella Living World - World: settle crime by talking, and a gated crime report. Replaces Mantella's own
-AbsolveCrime and ReportCrime actions (keep those two disabled).
+AbsolveCrime and ReportCrime actions (keep those two disabled; ours are named SettleCrime and ReportWitnessedCrime
+so Mantella's Disabled Actions, which matches by name, never switches them off).
 
 SettleCrime (only a guard, steward or Jarl; the bounty is the one in the speaker's crime faction):
-  pay       the non-violent bounty is paid, stolen goods are taken (vanilla payment)
-  bribe     the guard pockets bounty x 1.5 - Speech/100 x bounty x 0.5 gold; stolen goods are kept
+  pay       the non-violent bounty is paid, stolen goods are taken (vanilla payment); the player confirms first
+  bribe     the guard pockets bounty x 1.5 - Speech/100 x bounty x 0.5 gold; stolen goods are kept; the player
+            confirms first
   persuade  free, only a non-violent bounty of 100 or less, once per game day per hold
   A Thane of the hold, or a player famous there, has a non-violent bounty of 40 or less waived for free.
   Violent crime gold (assault, murder) is never cleared by any of these.
-ReportCrime (only a guard, steward or Jarl): adds the bounty only when another NPC in the conversation is there as
-the witness who told them.}
+ReportWitnessedCrime (only a guard, steward or Jarl): adds the vanilla bounty for the crime only when another NPC in
+the conversation (not the player's teammate) is there as the witness who told them. Each crime counts once per
+conversation and once per game day per hold, so reports never add more than one vanilla bounty per crime per day.}
 
 MLWW_State Property World Auto
 
@@ -18,6 +21,8 @@ string Property ACTION_REPORT = "mantella_mlww_report_crime" AutoReadOnly
 string Property ADVANCED = "MantellaConversation_Advanced_Action_" AutoReadOnly
 string Property LEGACY = "MantellaConversation_Action_" AutoReadOnly
 string Property KEY_PERSUADE = "MLWW_PersuadeDay_" AutoReadOnly
+string Property KEY_REPORTED_TALK = "MLWW_ReportedThisTalk" AutoReadOnly
+string Property KEY_REPORT_DAY = "MLWW_ReportDay_" AutoReadOnly
 int Property PERSUADE_MAX = 100 AutoReadOnly
 int Property WAIVE_MAX = 40 AutoReadOnly
 int Property FAME_WAIVE = 5 AutoReadOnly
@@ -27,39 +32,39 @@ Function Register()
 	RegisterForModEvent(LEGACY + ACTION_SETTLE, "OnSettleLegacy")
 	RegisterForModEvent(ADVANCED + ACTION_REPORT, "OnReportAdvanced")
 	RegisterForModEvent(LEGACY + ACTION_REPORT, "OnReportLegacy")
+	RegisterForModEvent("MantellaConversation_Started", "OnTalkStarted")
 EndFunction
+
+; A new conversation: crimes reported in the last one may be reported again (still once per day per hold).
+Event OnTalkStarted()
+	StorageUtil.StringListClear(None, KEY_REPORTED_TALK)
+EndEvent
 
 ; ---------------------------------------------------------------------------
 ; Settle
 ; ---------------------------------------------------------------------------
 
+; Both paths come from the NPC's reply, which the player never chose, so pay and bribe ask the player before any
+; gold or goods are taken.
 Event OnSettleAdvanced(Form akSpeaker, Form akConversation, int aiArguments)
-	Settle(akSpeaker as Actor, SKSE_HTTP.getString(aiArguments, "method", "pay"))
+	Settle(akSpeaker as Actor, SKSE_HTTP.getString(aiArguments, "method", "pay"), true)
 	MLWW_Util.ActionDone(ACTION_SETTLE)
 EndEvent
 
-; Mantella sent no arguments: treat it as paying. This one fires from a "SettleCrime:" keyword in the NPC's text,
-; which the player never chose, so the player confirms before any gold is taken.
+; Mantella sent no arguments: treat it as paying.
 Event OnSettleLegacy(Form akSpeaker)
-	Actor speaker = akSpeaker as Actor
-	Faction crime
-	If speaker
-		crime = speaker.GetCrimeFaction()
-	EndIf
-	If speaker && IsAuthority(speaker) && crime && crime.GetCrimeGoldNonViolent() > 0
-		string pick = SkyMessage.Show(speaker.GetDisplayName() + " offers to settle your bounty of " + crime.GetCrimeGoldNonViolent() + " gold. Pay it?", "Pay", "Not now")
-		If pick != "Pay"
-			Tell(MLWW_Util.PlayerName() + " chose not to pay the bounty now.")
-			MLWW_Util.ActionDone(ACTION_SETTLE)
-			Return
-		EndIf
-	EndIf
-	Settle(speaker, "pay")
+	Settle(akSpeaker as Actor, "pay", true)
 	MLWW_Util.ActionDone(ACTION_SETTLE)
 EndEvent
 
-; Returns what happened (also sent to Mantella), for tests.
-string Function Settle(Actor akSpeaker, string asMethod)
+; Yes/No before gold is taken. True when the player agreed.
+bool Function PlayerAgrees(string asQuestion, string asYes)
+	Return SkyMessage.Show(asQuestion, asYes, "Not now") == asYes
+EndFunction
+
+; Returns what happened (also sent to Mantella), for tests. abAsk: show the player a Yes/No before pay or bribe
+; takes anything (the action events always ask; tests call it without).
+string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 	string player = MLWW_Util.PlayerName()
 	If !IsAuthority(akSpeaker) || !akSpeaker.GetCrimeFaction()
 		Return Tell("Only a guard, steward or Jarl can settle " + player + "'s bounty; " + Name(akSpeaker) + " cannot.")
@@ -107,6 +112,9 @@ string Function Settle(Actor akSpeaker, string asMethod)
 		If purse < cost
 			Return Tell(player + " cannot afford the " + cost + " gold bribe for a " + nonViolent + " gold bounty in " + where + ".")
 		EndIf
+		If abAsk && !PlayerAgrees(who + " will forget your " + nonViolent + " gold bounty in " + where + " for a bribe of " + cost + " gold. You keep any stolen goods. Pay the bribe?", "Pay " + cost + " gold")
+			Return Tell(player + " chose not to pay " + who + " a bribe now; the bounty in " + where + " stands.")
+		EndIf
 		PlayerRef.RemoveItem(gold, cost, true, akSpeaker)
 		Clear(crime)
 		Debug.Notification("Bribe of " + cost + " gold: bounty cleared in " + where)
@@ -114,6 +122,9 @@ string Function Settle(Actor akSpeaker, string asMethod)
 	EndIf
 	If purse < nonViolent
 		Return Tell(player + " cannot afford to pay the " + nonViolent + " gold bounty in " + where + ".")
+	EndIf
+	If abAsk && !PlayerAgrees(who + " offers to settle your " + nonViolent + " gold bounty in " + where + ". Paying also hands over any stolen goods you carry. Pay it?", "Pay " + nonViolent + " gold")
+		Return Tell(player + " chose not to pay the bounty in " + where + " now.")
 	EndIf
 	; Vanilla payment takes the gold and the stolen goods; violent gold is held aside so only the non-violent part
 	; is charged, then put back.
@@ -168,13 +179,25 @@ string Function Report(Actor akSpeaker, MantellaConversation akConversation, str
 		Return Tell(akSpeaker.GetDisplayName() + " has no witness to the " + asCrime + " here, so no bounty is added.")
 	EndIf
 	Faction crime = akSpeaker.GetCrimeFaction()
-	string where = HoldText(World.HoldOfFaction(crime), crime)
+	int hold = World.HoldOfFaction(crime)
+	string where = HoldText(hold, crime)
+	; One report per crime per conversation, and at most one vanilla bounty per crime per hold per game day.
+	string reportKey = HoldKey(hold, crime) + "_" + asCrime
+	If StorageUtil.StringListHas(None, KEY_REPORTED_TALK, reportKey)
+		Return Tell("The " + asCrime + " was already reported in " + where + " in this talk; no more bounty is added.")
+	EndIf
+	string dayKey = KEY_REPORT_DAY + reportKey
+	If StorageUtil.GetIntValue(None, dayKey, -1) == MLWW_Util.Today()
+		Return Tell(player + " was already reported for " + asCrime + " in " + where + " today; no more bounty is added.")
+	EndIf
+	StorageUtil.StringListAdd(None, KEY_REPORTED_TALK, reportKey, false)
+	StorageUtil.SetIntValue(None, dayKey, MLWW_Util.Today())
 	crime.ModCrimeGold(gold, asCrime == "assault" || asCrime == "murder")
 	Debug.Notification(gold + " bounty added in " + where)
 	Return Tell(witness.GetDisplayName() + " reported " + player + " for " + asCrime + "; " + akSpeaker.GetDisplayName() + " added " + gold + " gold to the bounty in " + where + ".")
 EndFunction
 
-; Vanilla bounty values.
+; Vanilla bounty values (theft uses the flat 50 a typical stolen item costs; vanilla charges half the item's value).
 int Function CrimeGold(string asCrime)
 	If asCrime == "trespassing" || asCrime == "lockpicking"
 		Return 5
@@ -190,7 +213,8 @@ int Function CrimeGold(string asCrime)
 	Return 0
 EndFunction
 
-; Another living NPC in the conversation who is not a guard of the same hold: the one who saw it and told.
+; Another living NPC in the conversation who is not a guard of the same hold and not the player's teammate: the one
+; who saw it and told.
 Actor Function Witness(Actor akGuard, MantellaConversation akConversation)
 	If !akConversation
 		Return None
@@ -199,7 +223,7 @@ Actor Function Witness(Actor akGuard, MantellaConversation akConversation)
 	int count = akConversation.CountActorsInConversation()
 	While i < count
 		Actor other = akConversation.GetActorInConversationByIndex(i)
-		If other && other != akGuard && other != PlayerRef && !other.IsDead() && !IsAuthority(other)
+		If other && other != akGuard && other != PlayerRef && !other.IsDead() && !IsAuthority(other) && !other.IsPlayerTeammate()
 			Return other
 		EndIf
 		i += 1

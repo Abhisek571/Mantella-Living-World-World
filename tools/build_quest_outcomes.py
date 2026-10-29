@@ -1,6 +1,6 @@
 """Builds quest_outcomes.json: what the world knows about the player's finished quests.
 
-Each row says when it is true (quest completed, quest stage done, any of several, an actor dead), the line NPCs
+Each row says when it is true (quest completed, quest stage done, any or all of several, an actor dead or alive), the line NPCs
 are told ("{player}" is replaced by the player's name in game), who knows it (holds, factions, named NPCs) and how
 much fame it adds in those holds. The hold and category of each quest come from Quest Journal Overhaul's JSON
 files (read-only); the outcome rows themselves are written by hand below.
@@ -51,6 +51,18 @@ def stage(n):
     return {'type': 'stage', 'stage': n}
 
 
+# PaarthurnaxREF, the placed actor (persistent). The base NPC 0x03C57C is not an Actor in Papyrus.
+PAARTHURNAX_REF = 0x03C57D
+
+
+def dead(ref, plugin=PLUGIN):
+    return {'type': 'dead', 'form': ref, 'plugin': plugin}
+
+
+def alive(ref, plugin=PLUGIN):
+    return {'type': 'alive', 'form': ref, 'plugin': plugin}
+
+
 def holds(*h):
     return {'holds': list(h)}
 
@@ -67,7 +79,11 @@ OUTCOMES = [
     ('mq206_alduins_bane', 'MQ206', done, '{player} read an Elder Scroll and learned Dragonrend.', {'factions': ['Greybeards', 'Blades']}, 0, {}),
     ('mq302_truce', 'MQ302', done, '{player} called a peace council at High Hrothgar between the Jarls.', holds('all'), 1, {}),
     ('mq305_alduin', 'MQ305', done, '{player} defeated Alduin, the World-Eater, in Sovngarde.', holds('all'), 3, {'sets': {'mq_stage': 4}}),
-    ('mq_paarthurnax_dead', 'MQPaarthurnax', done, '{player} killed Paarthurnax at the Blades\' demand.', {'factions': ['Greybeards', 'Blades']}, 0, {}),
+    # The Paarthurnax Dilemma completes MQPaarthurnax (stage 100) when the Blades accept sparing him, so completion
+    # alone does not mean he died: check the actor.
+    ('mq_paarthurnax_dead', 'MQPaarthurnax', lambda q: dead(PAARTHURNAX_REF), '{player} killed Paarthurnax at the Blades\' demand.', {'factions': ['Greybeards', 'Blades']}, 0, {}),
+    ('mq_paarthurnax_spared', 'MQPaarthurnax', lambda q: {'type': 'all', 'of': [{'type': 'completed'}, alive(PAARTHURNAX_REF)]},
+     '{player} spared Paarthurnax and talked the Blades into letting him live.', {'factions': ['Greybeards', 'Blades']}, 0, {}),
     # Civil War
     ('cw_side_legion', 'CW01A', lambda q: stage(200), '{player} joined the Imperial Legion.', {'holds': ['Haafingar'], 'factions': ['Legion', 'Stormcloaks']}, 1, {'category': 'civil_war', 'sets': {'war_side': 'Legion'}}),
     ('cw_side_stormcloak', 'CW01B', lambda q: stage(200), '{player} joined the Stormcloaks.', {'holds': ['Eastmarch'], 'factions': ['Stormcloaks', 'Legion']}, 1, {'category': 'civil_war', 'sets': {'war_side': 'Stormcloaks'}}),
@@ -85,7 +101,8 @@ OUTCOMES = [
     ('tg01_thieves_guild', 'TG01', done, '{player} works for the Thieves Guild in Riften.', {'factions': ['Thieves Guild']}, 0, {'sets': {'guild': 'Thieves Guild', 'rank': 'member'}}),
     ('tg09_nightingale', 'TG09', done, '{player} is a Nightingale and restored the Thieves Guild.', {'factions': ['Thieves Guild']}, 0, {'sets': {'guild': 'Thieves Guild', 'rank': 'Nightingale'}}),
     # Dark Brotherhood (a secret)
-    ('db02_brotherhood', 'DB02', done, '{player} joined the Dark Brotherhood.', {'factions': ['Dark Brotherhood']}, 0, {'sets': {'guild': 'Dark Brotherhood', 'rank': 'member'}}),
+    # Stage 200 is the join; killing Astrid instead sets stage 220 (FailQuest).
+    ('db02_brotherhood', 'DB02', lambda q: stage(200), '{player} joined the Dark Brotherhood.', {'factions': ['Dark Brotherhood']}, 0, {'sets': {'guild': 'Dark Brotherhood', 'rank': 'member'}}),
     ('db11_listener', 'DB11', done, '{player} is the Listener of the Dark Brotherhood; the Emperor was assassinated.', {'factions': ['Dark Brotherhood']}, 0, {'sets': {'guild': 'Dark Brotherhood', 'rank': 'Listener'}}),
     # Thane titles (stage 200 is the title; completed covers patched versions)
     *[(f'thane_{h.lower()}', q, lambda q: {'type': 'any', 'of': [{'type': 'completed'}, stage(200)]},
