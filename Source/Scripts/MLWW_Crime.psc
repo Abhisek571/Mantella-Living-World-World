@@ -38,9 +38,23 @@ Event OnSettleAdvanced(Form akSpeaker, Form akConversation, int aiArguments)
 	MLWW_Util.ActionDone(ACTION_SETTLE)
 EndEvent
 
-; Mantella sent no arguments: treat it as paying.
+; Mantella sent no arguments: treat it as paying. This one fires from a "SettleCrime:" keyword in the NPC's text,
+; which the player never chose, so the player confirms before any gold is taken.
 Event OnSettleLegacy(Form akSpeaker)
-	Settle(akSpeaker as Actor, "pay")
+	Actor speaker = akSpeaker as Actor
+	Faction crime
+	If speaker
+		crime = speaker.GetCrimeFaction()
+	EndIf
+	If speaker && IsAuthority(speaker) && crime && crime.GetCrimeGoldNonViolent() > 0
+		string pick = SkyMessage.Show(speaker.GetDisplayName() + " offers to settle your bounty of " + crime.GetCrimeGoldNonViolent() + " gold. Pay it?", "Pay", "Not now")
+		If pick != "Pay"
+			Tell(MLWW_Util.PlayerName() + " chose not to pay the bounty now.")
+			MLWW_Util.ActionDone(ACTION_SETTLE)
+			Return
+		EndIf
+	EndIf
+	Settle(speaker, "pay")
 	MLWW_Util.ActionDone(ACTION_SETTLE)
 EndEvent
 
