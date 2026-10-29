@@ -2,7 +2,7 @@
     "identifier": "mantella_mlww_report_crime",
     "name": "ReportCrime",
     "description": "Add a bounty for a crime a witness in this conversation saw the player commit.",
-    "note": "Needs Mantella Living World - World. Turn off Mantella's own AbsolveCrime and ReportCrime.",
+    "note": "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards only. A guard adds a bounty only when another NPC is present as a witness. Keep Mantella's own AbsolveCrime and ReportCrime off.",
     "key": "ReportCrime",
     "enabled": true,
     "lw_gate": "guard",

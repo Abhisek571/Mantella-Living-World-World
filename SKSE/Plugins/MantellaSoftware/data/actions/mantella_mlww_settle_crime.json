@@ -2,7 +2,7 @@
     "identifier": "mantella_mlww_settle_crime",
     "name": "SettleCrime",
     "description": "Settle the player's non-violent bounty in your hold: pay it, take a bribe, or let it go when persuaded.",
-    "note": "Needs Mantella Living World - World. Turn off Mantella's own AbsolveCrime and ReportCrime.",
+    "note": "Needs Mantella Living World - World. Guards only. Pay asks you Yes/No first. Bribe and persuade need Advanced Actions on in Mantella. Keep Mantella's own AbsolveCrime and ReportCrime off.",
     "key": "SettleCrime",
     "enabled": true,
     "lw_gate": "guard",
