@@ -13,6 +13,7 @@
 // If not, see <https://www.gnu.org/licenses/>.
 
 #include "Listener.h"
+#include "Personal.h"
 #include "Writer.h"
 
 namespace
@@ -37,6 +38,7 @@ namespace
 		if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
 			MLWW::Writer::Start();
 			MLWW::Listener::Register();
+			MLWW::Personal::Register();
 		}
 	}
 }
@@ -47,5 +49,8 @@ SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* a_skse)
 	SKSE::Init(a_skse, false);
 	logger::info("MLWW_Listener {} loading", SKSE::PluginDeclaration::GetSingleton()->GetVersion().string());
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
+	if (!SKSE::GetPapyrusInterface()->Register(MLWW::Personal::RegisterFunctions)) {
+		logger::error("Papyrus natives not registered");
+	}
 	return true;
 }

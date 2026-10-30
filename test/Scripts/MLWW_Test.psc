@@ -222,3 +222,95 @@ EndFunction
 bool Function TalkRunning() global
 	Return (Game.GetFormFromFile(0x03D41A, "Mantella.esp") as Quest).IsRunning()
 EndFunction
+
+; P1-P8: what the player did to an NPC (MLWW_Personal, MLWW_Listener.dll events) and grief (Relationships)
+MLWW_Personal Function Personal() global
+	Return Game.GetFormFromFile(0x000807, PLUGIN()) as MLWW_Personal
+EndFunction
+
+string Function PersonalLine(Actor akNpc) global
+	Return Personal().Line(akNpc)
+EndFunction
+
+; A real gift: the player hands the item over (ContainerChanged event, player to NPC).
+string Function GiveTo(Actor akNpc, Form akItem, int aiCount) global
+	Game.GetPlayer().AddItem(akItem, aiCount, true)
+	Game.GetPlayer().RemoveItem(akItem, aiCount, true, akNpc)
+	Return "given"
+EndFunction
+
+; An item owned by akOwner placed next to the player, for theft and worn-stolen tests.
+ObjectReference Function PlaceOwned(Actor akOwner, Form akItem) global
+	ObjectReference ref = Game.GetPlayer().PlaceAtMe(akItem, 1)
+	ref.SetActorOwner(akOwner.GetActorBase())
+	Return ref
+EndFunction
+
+string Function PickUp(ObjectReference akRef) global
+	akRef.Activate(Game.GetPlayer())
+	Return "activated"
+EndFunction
+
+string Function EquipLast(Form akItem) global
+	Game.GetPlayer().EquipItem(akItem, false, true)
+	Return "equipped"
+EndFunction
+
+string Function AddBounty(int aiHold, int aiGold) global
+	WorldState().CrimeFaction(aiHold).ModCrimeGold(aiGold, false)
+	Return Bounty(aiHold)
+EndFunction
+
+float Function Got(Form akForm, string asKey) global
+	Return StorageUtil.GetFloatValue(akForm, asKey, -1.0)
+EndFunction
+
+string Function GotText(Form akForm, string asKey) global
+	Return StorageUtil.GetStringValue(akForm, asKey) + " list=" + StorageUtil.StringListCount(akForm, asKey) + " int=" + StorageUtil.GetIntValue(akForm, asKey, -1)
+EndFunction
+
+string Function ForgetPersonal(Actor akNpc) global
+	string[] keys = new string[10]
+	keys[0] = "MLWW_StruckDay"
+	keys[1] = "MLWW_WokenAt"
+	keys[2] = "MLWW_Gifts"
+	keys[3] = "MLWW_TradeDay"
+	keys[4] = "MLWW_ChestGold"
+	keys[5] = "MLWW_DiedDay"
+	int i = 0
+	While i < 6
+		StorageUtil.UnsetFloatValue(akNpc, keys[i])
+		StorageUtil.UnsetIntValue(akNpc, keys[i])
+		StorageUtil.StringListClear(akNpc, keys[i])
+		i += 1
+	EndWhile
+	StorageUtil.UnsetFloatValue(akNpc.GetActorBase(), "MLWW_CaughtDay")
+	Return "forgot"
+EndFunction
+
+; Moves the stored days back, as if they happened afDays earlier.
+string Function AgePersonal(Actor akNpc, float afDays) global
+	StorageUtil.AdjustFloatValue(akNpc, "MLWW_StruckDay", -afDays)
+	StorageUtil.AdjustFloatValue(akNpc, "MLWW_DiedDay", -afDays)
+	Return "aged"
+EndFunction
+
+string Function RelationshipsLast() global
+	int n = StorageUtil.StringListCount(None, "MRB_Sent")
+	string out = ""
+	int i = 0
+	While i < n
+		out += StorageUtil.StringListGet(None, "MRB_Sent", i) + " || "
+		i += 1
+	EndWhile
+	Return out
+EndFunction
+
+string Function ClearRelationshipsSent() global
+	StorageUtil.StringListClear(None, "MRB_Sent")
+	Return "cleared"
+EndFunction
+
+int Function SleepState(Actor akNpc) global
+	Return akNpc.GetSleepState()
+EndFunction

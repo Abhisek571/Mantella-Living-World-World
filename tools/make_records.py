@@ -12,6 +12,7 @@ QUESTS = [
     ('000804', 'MLWW_QuestCrime', 'MLWW_Crime', 'Mantella Living World - World crime', True),
     ('000805', 'MLWW_QuestBanter', 'MLWW_Banter', 'Mantella Living World - World banter', False),
     ('000806', 'MLWW_QuestInitiative', 'MLWW_Initiative', 'Mantella Living World - World initiative', False),
+    ('000807', 'MLWW_QuestPersonal', 'MLWW_Personal', 'Mantella Living World - World personal', False),
 ]
 # Settings (World page of the Integration Hub's MCM): form id, editor id, type, value, the script that uses it
 GLOBALS = [('000810', 'MLWW_BanterOn', 'GlobalShort', 1, 'MLWW_Banter'),
@@ -41,7 +42,7 @@ for fid, eid, script, name, needs_state in QUESTS:
 for gfid, gname, typ, val, _ in GLOBALS:
     write(f'esp/Globals/{gname} - {gfid}_{E}.yaml', f'MutagenObjectType: {typ}\nFormKey: {gfid}:{E}\nEditorID: {gname}\nData: {val}\n')
 write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n  Flags:\n  - Small\n  Author: itsPigeon2000\n'
-      '  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk.\n'
+      '  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk, what the player did to each NPC.\n'
       '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n')
 write('esp/spriggit-meta.json', json.dumps({'PackageName': 'Spriggit.Yaml.Skyrim', 'Version': '0.40.0', 'Release': 'SkyrimSE', 'ModKey': E}, indent=2))
 

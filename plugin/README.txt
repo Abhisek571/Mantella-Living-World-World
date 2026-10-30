@@ -37,6 +37,23 @@ MLWW_VoicedLine. They send "MLWW_MantellaLine" instead (no word or distance limi
 This event fires about 0.5 s after the line starts.
 
 
+Personal events (Personal.cpp)
+-------------------------------
+What the player does to NPCs, as mod events for MLWW_Personal (sender = the NPC):
+  MLWW_Died     a unique NPC died; numArg 1 when the player killed them
+  MLWW_Struck   the player hit a non-hostile NPC (hostility read when the hit lands; friendly
+                spells ignored; once per NPC per real minute)
+  MLWW_Woken    the player activated a sleeping NPC; numArg = game hour
+  MLWW_Gift     an item went from the player into a living NPC's inventory (not while bartering
+                or reverse-pickpocketing; for teammates only gold); strArg = item, numArg = count
+  MLWW_Trade    barter menu closed; numArg = player's gold change (above 0: the player sold),
+                strArg = gold left in the merchant chest (-1 when none)
+  MLWW_Caught   the player's bounty rose within 3 s of taking an NPC-owned item (strArg "theft",
+                sender = owner's base) or of a pickpocket attempt ("pickpocketing", sender = NPC)
+Bounty is summed over every crime faction once a second (worker-thread timer, read in a task).
+Papyrus native (script MLWW_Native): string WornStolenFrom(Actor) -> worn items owned by that NPC.
+
+
 How it works (and why)
 ----------------------
 Mechanism: a BSTEventSink<TESTopicInfoEvent> on ScriptEventSourceHolder. No hooks, no polling.

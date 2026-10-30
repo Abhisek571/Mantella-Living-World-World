@@ -25,6 +25,7 @@ add_commonlibsse_plugin(${PROJECT_NAME}
 	SOURCES
 		src/main.cpp
 		src/Listener.cpp
+		src/Personal.cpp
 		src/Writer.cpp
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)

@@ -4,7 +4,7 @@ ModHeader:
   Flags:
   - Small
   Author: itsPigeon2000
-  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk.
+  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk, what the player did to each NPC.
   MasterReferences:
   - Master: Skyrim.esm
     FileSize: 0
