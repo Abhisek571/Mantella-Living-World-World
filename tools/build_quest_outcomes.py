@@ -12,7 +12,19 @@ import argparse, glob, json, os
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, 'SKSE', 'Plugins', 'StorageUtilData', 'MantellaLivingWorld', 'quest_outcomes.json')
-MODS = r'D:\Modlists\NGVO\mods'
+# Local folders: the environment (MLW_MO2, MLW_GAME) or the untracked tools/local-paths.json of the Integration Hub
+# repository ({"mo2": "<Mod Organizer 2 instance>", "game": "<Skyrim Special Edition folder>"}).
+def _local(key, env):
+    if os.environ.get(env):
+        return os.environ[env]
+    f = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'Mantella-Living-World-Hub'), 'tools', 'local-paths.json')
+    value = json.load(open(f, encoding='utf-8')).get(key, '') if os.path.isfile(f) else ''
+    if not value:
+        raise SystemExit(f'Set {env}, or "{key}" in {f}')
+    return value
+
+
+MODS = os.path.join(_local('mo2', 'MLW_MO2'), 'mods')
 # Later folders win when two files place the same quest.
 DEFAULT_QJO = [os.path.join(MODS, d) for d in ('[NoDelete] Quest Journal Overhaul',
                                                '[NoDelete] Quest Journal Overhaul - More Mod Support',

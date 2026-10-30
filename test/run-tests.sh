@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Drives the World module's live tests (F1-F6) over DevBench, then checks world.json on disk.
-# Needs: the game running in the DevBench Test profile with a save loaded, this mod's test build (MLWW_Test.pex next
+# Needs: the game running in a test profile with DevBench with a save loaded, this mod's test build (MLWW_Test.pex next
 # to the module's scripts), the player in or near Whiterun/Riverwood, no helmet or hood on, not Thane of Whiterun or
 # Haafingar yet (F1 and F3 make the player Thane of both: use a throwaway save).
 # usage: bash run-tests.sh                      e.g. SOLITUDE_GUARD=0x000A1D2E bash run-tests.sh
 #   SOLITUDE_GUARD  a Solitude guard reference for the strangers test (default: Jarl Elisif, also Haafingar)
 set -u
-NGVO=D:/Modlists/NGVO
-WORLD="$NGVO/overwrite/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/world.json"
-DB="$NGVO/tools/devbench-cli.sh"
+MO2=${MO2:?set MO2 to your Mod Organizer 2 instance folder}
+WORLD="$MO2/overwrite/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/world.json"
+DB="$MO2/tools/devbench-cli.sh"
 PASS=0; FAIL=0
 
 call() { bash "$DB" call "$@" 2>&1 | py -3 -I -c "import json,sys
