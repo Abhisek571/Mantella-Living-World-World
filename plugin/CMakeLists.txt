@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(MLWW_Listener VERSION 1.0.0 LANGUAGES CXX)
+project(MLWW_Listener VERSION 1.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+# Static C++ runtime: the DLL does not depend on the Visual C++ Redistributable installed on the
+# player's PC (an outdated one crashes plugins built with a newer compiler while they load).
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # Keep build-machine paths out of the binary (__FILE__ / source_location).
 file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/" MLWW_SOURCE_ROOT)

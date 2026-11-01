@@ -18,7 +18,7 @@
 
 namespace
 {
-	void SetupLog()
+	void OpenLog()
 	{
 		auto dir = logger::log_directory();
 		if (!dir) {
@@ -31,6 +31,16 @@ namespace
 		log->flush_on(spdlog::level::info);
 		log->set_pattern("[%Y-%m-%d %H:%M:%S] [%l] %v");
 		spdlog::set_default_logger(std::move(log));
+	}
+
+	// A log that cannot be opened (for example a Documents path the ANSI code page cannot hold)
+	// must not stop the plugin from loading: it then runs without its log.
+	void SetupLog() noexcept
+	{
+		try {
+			OpenLog();
+		} catch (...) {
+		}
 	}
 
 	void OnMessage(SKSE::MessagingInterface::Message* a_msg)
