@@ -22,6 +22,7 @@ Requires:
 - [Mantella](https://www.nexusmods.com/skyrimspecialedition/mods/98631) 0.14 with [Mantella - Direct AI Connect](https://github.com/Abhisek571/Mantella-Anthropic-API), which the Hub extension and guard-only actions need
 - Advanced Actions on in Mantella (Actions tab of its settings) for bribe, persuade and ReportWitnessedCrime
 - SKSE and [PapyrusUtil SE](https://www.nexusmods.com/skyrimspecialedition/mods/13048)
+- [powerofthree's Papyrus Extender](https://www.nexusmods.com/skyrimspecialedition/mods/22854)
 - [Papyrus MessageBox - SKSE NG](https://www.nexusmods.com/skyrimspecialedition/mods/83578)
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
 
