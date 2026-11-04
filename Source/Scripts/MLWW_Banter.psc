@@ -239,12 +239,13 @@ EndFunction
 
 ; A random party member near the player that is not akNot, or None.
 Actor Function PickPartyMember(Actor akNot)
-	Actor[] near = MiscUtil.ScanCellNPCs(PlayerRef, RADIUS)
+	; MiscUtil.ScanCellNPCs crashes the game in Skyrim VR.
+	ObjectReference[] near = PO3_SKSEFunctions.FindAllReferencesOfFormType(PlayerRef, 62, RADIUS)
 	Actor[] party = new Actor[16]
 	int n = 0
 	int i = 0
 	While i < near.Length && n < 16
-		Actor a = near[i]
+		Actor a = near[i] as Actor
 		If a && a != PlayerRef && a != akNot && a.IsPlayerTeammate() && !a.IsInCombat() && Near(a)
 			party[n] = a
 			n += 1
