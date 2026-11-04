@@ -61,18 +61,21 @@ namespace MLWW::Personal
 			return total;
 		}
 
+		// Not Actor::GetGoldAmount: it dereferences the Gold default object unchecked, which crashes when that is empty.
+		std::int32_t GoldOf(RE::TESObjectREFR* a_ref)
+		{
+			std::int32_t gold = 0;
+			for (auto& [obj, count] : a_ref->GetInventoryCounts([](RE::TESBoundObject& a_obj) { return a_obj.IsGold(); })) {
+				gold += count;
+			}
+			return gold;
+		}
+
 		std::int32_t ChestGold(RE::Actor* a_merchant)
 		{
 			auto* faction = a_merchant ? a_merchant->GetVendorFaction() : nullptr;
 			auto* chest = faction ? faction->vendorData.merchantContainer : nullptr;
-			if (!chest) {
-				return -1;
-			}
-			std::int32_t gold = 0;
-			for (auto& [obj, count] : chest->GetInventoryCounts([](RE::TESBoundObject& a_obj) { return a_obj.IsGold(); })) {
-				gold += count;
-			}
-			return gold;
+			return chest ? GoldOf(chest) : -1;
 		}
 
 		bool PickpocketActive() { return Clock::now() < g_pickpocketUntil; }
@@ -259,7 +262,7 @@ namespace MLWW::Personal
 				auto target = RE::TESObjectREFR::LookupByHandle(RE::BarterMenu::GetTargetRefHandle());
 				auto* actor = target ? target->As<RE::Actor>() : nullptr;
 				g_barterTarget = actor ? actor->GetHandle() : RE::ActorHandle{};
-				g_barterGold = player->GetGoldAmount();
+				g_barterGold = GoldOf(player);
 				return;
 			}
 			auto merchant = g_barterTarget.get();
@@ -267,7 +270,7 @@ namespace MLWW::Personal
 			if (!merchant) {
 				return;
 			}
-			const std::int32_t delta = player->GetGoldAmount() - g_barterGold;  // above 0: the player sold
+			const std::int32_t delta = GoldOf(player) - g_barterGold;  // above 0: the player sold
 			const std::int32_t chest = ChestGold(merchant.get());
 			if (delta != 0) {
 				SendModEvent("MLWW_Trade", std::to_string(chest), static_cast<float>(delta), merchant.get());
