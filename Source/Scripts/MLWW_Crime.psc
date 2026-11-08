@@ -269,12 +269,24 @@ string Function NoEvidence(string asCrime, Actor akGuard, MantellaConversation a
 		If murder < 0.0 || now - murder > 3.0
 			Return "Nobody here died by " + player + "'s hand lately."
 		EndIf
-		; Only the hold where it happened: the victim's crime faction, or its hold.
+		; Only the hold where it happened: the victim's crime faction, or its hold. Each hold and faction keeps its own
+		; day (MLWW_Personal.OnMurder), so a later killing in the wilds does not hide this one.
 		Faction crime = akGuard.GetCrimeFaction()
 		int hold = World.HoldOfFaction(crime)
+		float here = -1.0
+		If hold >= 0
+			here = StorageUtil.GetFloatValue(None, "MLWW_MurderDay_" + hold, -1.0)
+		EndIf
+		If crime && StorageUtil.GetFloatValue(crime, "MLWW_MurderDay", -1.0) > here
+			here = StorageUtil.GetFloatValue(crime, "MLWW_MurderDay", -1.0)
+		EndIf
+		; a murder recorded before the per-hold days existed
 		int murderHold = StorageUtil.GetIntValue(None, KEY_MURDER_HOLD, -1)
 		Form murderFaction = StorageUtil.GetFormValue(None, KEY_MURDER_FACTION)
-		If !((hold >= 0 && hold == murderHold) || (murderFaction && murderFaction == crime))
+		If ((hold >= 0 && hold == murderHold) || (murderFaction && murderFaction == crime)) && murder > here
+			here = murder
+		EndIf
+		If here < 0.0 || now - here > 3.0
 			Return "Nobody in " + HoldText(hold, crime) + " died by " + player + "'s hand lately."
 		EndIf
 		If crime.GetCrimeGoldViolent() >= MURDER_GOLD

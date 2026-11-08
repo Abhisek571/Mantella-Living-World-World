@@ -80,9 +80,17 @@ Event OnMurder(string asEvent, string asCrime, float afNum, Form akSender)
 	If world && crime
 		hold = world.HoldOfFaction(crime)
 	EndIf
-	StorageUtil.SetFloatValue(None, "MLWW_LastMurderDay", Utility.GetCurrentGameTime())
+	float today = Utility.GetCurrentGameTime()
+	StorageUtil.SetFloatValue(None, "MLWW_LastMurderDay", today)
 	StorageUtil.SetIntValue(None, "MLWW_LastMurderHold", hold)
 	StorageUtil.SetFormValue(None, "MLWW_LastMurderFaction", crime)
+	; Per hold and per crime faction too, so a later killing elsewhere does not hide this one from that hold's guards.
+	If hold >= 0
+		StorageUtil.SetFloatValue(None, "MLWW_MurderDay_" + hold, today)
+	EndIf
+	If crime
+		StorageUtil.SetFloatValue(crime, "MLWW_MurderDay", today)
+	EndIf
 EndEvent
 
 Event OnStruck(string asEvent, string asText, float afNum, Form akSender)
