@@ -166,6 +166,7 @@ t SetBounty "[$WHITERUN,80,0]" >/dev/null; g0=$(t Gold)
 check "bribe: line" "$(t Settle "[$PROVENTUS,\"bribe\"]")" "took a 100 gold bribe"
 check "bribe: cleared" "$(t Bounty "[$WHITERUN]")" "^0/0$"
 check "bribe: 100 gold taken" "$(( g0 - $(t Gold) ))" "^100$"
+con "player.setav speechcraft 70"  # persuading needs Speech at least the bounty
 t ResetPersuade "[$WHITERUN]" >/dev/null; t SetBounty "[$WHITERUN,60,0]" >/dev/null; g0=$(t Gold)
 check "persuade: let go" "$(t Settle "[$PROVENTUS,\"persuade\"]")" "let .* 60 gold bounty .* go"
 check "persuade: cleared, free" "$(t Bounty "[$WHITERUN]") $(( g0 - $(t Gold) ))" "^0/0 0$"
