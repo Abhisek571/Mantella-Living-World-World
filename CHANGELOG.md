@@ -2,7 +2,7 @@
 
 Every change to Mantella Living World - World. The Nexus page lists only the main changes for each version.
 
-## Unreleased
+## 1.2.0 (2026-11-09)
 
 ### New
 - Bribes and persuasion: settle a bounty with a guard by paying them off or talking them round (persuading needs Speech at least the bounty).
