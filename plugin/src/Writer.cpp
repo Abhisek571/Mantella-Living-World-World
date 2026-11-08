@@ -170,6 +170,22 @@ namespace MLWW::Writer
 		g_cv.notify_one();
 	}
 
+	void Clear()
+	{
+		{
+			std::scoped_lock lock(g_lock);
+			g_pending.clear();
+			// Due now, so it runs before any line pushed after this call is written.
+			g_jobs.push_back({ clock::now(), []() {
+								  if (!g_lines.empty()) {
+									  g_lines.clear();
+									  WriteFile();
+								  }
+							  } });
+		}
+		g_cv.notify_one();
+	}
+
 	void RunLater(std::chrono::milliseconds a_delay, std::function<void()> a_fn)
 	{
 		{

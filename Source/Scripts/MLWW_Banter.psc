@@ -47,8 +47,11 @@ Event OnVoicedLine(string asEventName, string asText, float afDistance, Form akS
 	If !speaker || speaker == PlayerRef || pendingA || talking
 		Return
 	EndIf
+	If !Roll()
+		Return
+	EndIf
 	Actor reactor = PickPartyMember(speaker)
-	If reactor && Roll()
+	If reactor
 		Plan(reactor, speaker, reactor.GetDisplayName() + " heard " + speaker.GetDisplayName() + " say that. Only " + reactor.GetDisplayName() + " speaks now: one short sentence reacting to it.")
 	EndIf
 EndEvent
@@ -61,8 +64,13 @@ Function LocationChanged(Location akOldLoc, Location akNewLoc)
 	TwoOfTheParty("The party just walked into " + akNewLoc.GetName() + ".")
 EndFunction
 
-; The player alias passes hits on; while a fight lasts the quest checks every 5 seconds whether it is over.
+; The player alias (MLWW_BanterAlias) passes hits on; while a fight lasts the quest checks every 5 seconds whether it
+; is over.
 bool watchingFight
+bool Function Watching()
+	Return watchingFight
+EndFunction
+
 Function PlayerHit()
 	If !watchingFight
 		watchingFight = true
@@ -152,7 +160,7 @@ Function Fire()
 	string seed = pendingSeed
 	pendingA = None
 	pendingB = None
-	If !Calm() || !Near(a) || !Near(b) || a.IsInCombat() || b.IsInCombat()
+	If !Calm() || !Near(a) || !Near(b) || a.IsInCombat() || b.IsInCombat() || a.GetCurrentScene() || b.GetCurrentScene()
 		MLWW_Util.Log("banter dropped: no longer calm")
 		Return
 	EndIf

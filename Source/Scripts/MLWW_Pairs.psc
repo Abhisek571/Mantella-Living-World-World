@@ -71,6 +71,8 @@ Event OnConversationStarted()
 			StorageUtil.FormListRemoveAt(None, KEY_MEMBERS, i)
 		EndIf
 	EndWhile
+	; Pairs told in a talk that never sent Ended may be told again; a pair is only told on NPC_Added, once per member.
+	StorageUtil.StringListClear(None, KEY_TOLD)
 EndEvent
 
 Event OnConversationEnded()
@@ -104,6 +106,9 @@ EndFunction
 
 ; 0 strangers, 1 know of, 2 acquainted, 3 close.
 int Function Level(Actor akA, Actor akB)
+	If Household(akA) && Household(akB)
+		Return 3  ; spouse, adopted children and steward have rank 0 to each other but live together
+	EndIf
 	int rank = akA.GetRelationshipRank(akB)
 	int talks = CoTalks(akA, akB)
 	Location homeA = akA.GetEditorLocation()
@@ -125,6 +130,9 @@ EndFunction
 string Function Line(Actor akA, Actor akB, int aiLevel)
 	string both = akA.GetDisplayName() + " and " + akB.GetDisplayName()
 	If aiLevel == 3
+		If Household(akA) && Household(akB)
+			Return both + " live together in " + MLWW_Util.PlayerName() + "'s home as family."
+		EndIf
 		If akA.GetRelationshipRank(akB) < 0
 			Return both + " know each other well and do not get along."
 		EndIf
@@ -135,6 +143,16 @@ string Function Line(Actor akA, Actor akB, int aiLevel)
 		Return both + " know of each other but have hardly talked."
 	EndIf
 	Return both + " are strangers to each other."
+EndFunction
+
+; The player's household: close in Relationships (spouse), an adopted child or the house steward.
+bool Function Household(Actor akActor)
+	If StorageUtil.GetIntValue(akActor, "MRB_Close") > 0
+		Return true
+	EndIf
+	Faction adopted = Game.GetFormFromFile(0x0042B0, "HearthFires.esm") as Faction  ; BYOHRelationshipAdoptionFaction
+	Faction steward = Game.GetFormFromFile(0x00308E, "HearthFires.esm") as Faction  ; BYOHHouseStewardFaction
+	Return (adopted && akActor.IsInFaction(adopted)) || (steward && akActor.IsInFaction(steward))
 EndFunction
 
 ; Cities, towns, settlements and holds hold everyone: sharing one says nothing.

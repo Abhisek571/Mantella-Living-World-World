@@ -11,9 +11,10 @@ string Property WORLD_FILE = "MantellaLivingWorld/world.json" AutoReadOnly
 string Property OUTCOMES = "MantellaLivingWorld/quest_outcomes.json" AutoReadOnly
 float Property THROTTLE = 30.0 AutoReadOnly
 int Property FAME_MAX = 10 AutoReadOnly
-int Property MAX_EVENTS = 20 AutoReadOnly
+int Property MAX_EVENTS = 128 AutoReadOnly  ; every true row; the Hub picks per audience
 string Property KEY_SCANNED = "MLWW_Scanned" AutoReadOnly
 string Property KEY_SEEN = "MLWW_Seen_" AutoReadOnly
+string Property KEY_DUNGEONS = "MLWW_DungeonsSeen" AutoReadOnly
 
 string[] holdNames
 Location[] holdLocs
@@ -26,19 +27,66 @@ float lastWrite = -1000.0
 bool pending = false
 bool busy = false
 bool refreshed = false
+bool dungeonBusy = false
 
 Function Register()
 	Setup()
 	lastWrite = -1000.0  ; real time restarts at 0 on every launch
 	pending = false
 	busy = false
+	dungeonBusy = false
 	RegisterForModEvent("MantellaConversation_Started", "OnConversationStarted")
 	RegisterForModEvent("MLW_ReportRequest", "OnReportRequest")
+	; Until the first refresh of this game writes it, world.json still holds the last game's character: readers skip it.
+	JsonUtil.SetPathIntValue(WORLD_FILE, ".loading", 1)
+	JsonUtil.Save(WORLD_FILE)
 	RequestRefresh()
 EndFunction
 
+; The dungeon count is read first: a refresh is long, and a second location change during it must not read the count
+; with the wrong place left.
 Function LocationChanged(Location akOldLoc, Location akNewLoc)
+	CheckDungeons(akOldLoc)
 	RequestRefresh()
+EndFunction
+
+; The vanilla count rises while the player is inside, so the place just left is the dungeon: everyone in the party now
+; gets it. The first check on a save only takes the count. afWait: Party() only has followers who are loaded and close,
+; and after a load door they arrive a moment after the player.
+; dungeonBusy: two location changes close together (nested locations) would both read the old count before either
+; writes it; the second check is skipped while the first one runs, its wait included.
+Function CheckDungeons(Location akLeft, float afWait = 5.0)
+	If dungeonBusy
+		Return
+	EndIf
+	dungeonBusy = true
+	int cleared = Game.QueryStat("Dungeons Cleared")
+	int seen = StorageUtil.GetIntValue(None, KEY_DUNGEONS, -1)
+	If cleared == seen
+		dungeonBusy = false
+		Return
+	EndIf
+	StorageUtil.SetIntValue(None, KEY_DUNGEONS, cleared)
+	If seen < 0 || cleared < seen
+		dungeonBusy = false
+		Return
+	EndIf
+	string name = ""
+	If akLeft
+		name = akLeft.GetName()
+	EndIf
+	If afWait > 0.0
+		Utility.Wait(afWait)
+	EndIf
+	Actor[] party = MLWW_Native.Party()
+	int i = 0
+	While party && i < party.Length
+		MLWW_Facts.Dungeon(party[i], name, cleared - seen)
+		MLWW_Facts.Score(party[i], "deeds", 2.0)
+		MLWW_Facts.Sync(party[i])
+		i += 1
+	EndWhile
+	dungeonBusy = false
 EndFunction
 
 Event OnConversationStarted()
@@ -124,6 +172,9 @@ Function Refresh()
 	bool[] truth = new bool[128]
 	string[] evJson = new string[128]
 	float[] evDay = new float[128]
+	string[] evId = new string[128]
+	string[] gone = new string[128]  ; rows a later true row supersedes ("is the Harbinger" over "joined the Circle")
+	int goneCount = 0
 	int events = 0
 	string player = MLWW_Util.PlayerName()
 
@@ -170,6 +221,14 @@ Function Refresh()
 					guildRanks[g] = JsonUtil.GetPathStringValue(OUTCOMES, row + ".sets.rank")
 				EndIf
 			EndIf
+			string[] supersedes = JsonUtil.PathStringElements(OUTCOMES, row + ".supersedes")
+			int s = 0
+			While supersedes && s < supersedes.Length && goneCount < 128
+				gone[goneCount] = supersedes[s]
+				goneCount += 1
+				s += 1
+			EndWhile
+			evId[events] = ids[i]
 			evDay[events] = StorageUtil.GetFloatValue(None, seenKey, -1.0)
 			string text = MLWW_Util.Replace(JsonUtil.GetPathStringValue(OUTCOMES, row + ".text"), "{player}", player)
 			evJson[events] = "{\"day\":" + evDay[events] + ",\"id\":" + MLWW_Util.Quote(ids[i]) + ",\"text\":" + MLWW_Util.Quote(text) + ",\"holds\":" + MLWW_Util.QuoteAll(audience) + ",\"factions\":" + MLWW_Util.QuoteAll(JsonUtil.PathStringElements(OUTCOMES, row + ".audience.factions")) + ",\"named\":" + MLWW_Util.QuoteAll(JsonUtil.PathStringElements(OUTCOMES, row + ".audience.named")) + "}"
@@ -179,6 +238,18 @@ Function Refresh()
 	EndWhile
 	StorageUtil.SetIntValue(None, KEY_SCANNED, 1)
 	AddStatFame(newFame)
+	; Superseded rows keep their fame and sets (the later deed implies them) but are not told as events.
+	int kept = 0
+	i = 0
+	While i < events
+		If goneCount == 0 || gone.Find(evId[i]) < 0
+			evJson[kept] = evJson[i]
+			evDay[kept] = evDay[i]
+			kept += 1
+		EndIf
+		i += 1
+	EndWhile
+	events = kept
 
 	fameByHold = newFame
 	thaneBits = newThane
@@ -341,6 +412,7 @@ bool Function Write(float afNow, string asPlayer, string[] akGuildNames, string[
 	EndIf
 	ok = ok && JsonUtil.SetRawPathValue(WORLD_FILE, ".hold", MLWW_Util.Quote(here))
 	JsonUtil.SetPathIntValue(WORLD_FILE, ".version", 1)
+	JsonUtil.SetPathIntValue(WORLD_FILE, ".loading", 0)
 	JsonUtil.SetPathIntValue(WORLD_FILE, ".mq_stage", mqStageNow)
 	JsonUtil.SetPathFloatValue(WORLD_FILE, ".day", afNow)
 	Return ok
@@ -360,10 +432,12 @@ bool Function WriteQuests()
 		string id = JsonUtil.StringListGet(QUESTS_WANTED, "quests", i)
 		Quest q = Quest.GetQuest(id)
 		If q
+			; Stage 0 is not started, even for a quest that runs from the start of the game (C00, CW00A, DLC1VQ00); a quest
+			; that stopped after starting is over, completed or not (pointer quests never complete).
 			int progress = 0
-			If q.IsCompleted()
+			If q.IsCompleted() || (!q.IsRunning() && q.GetStage() > 0)
 				progress = 2
-			ElseIf q.IsRunning() || q.GetStage() > 0
+			ElseIf q.IsRunning() && q.GetStage() > 0
 				progress = 1
 			EndIf
 			If written > 0

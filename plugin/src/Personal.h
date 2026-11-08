@@ -17,8 +17,14 @@
 namespace MLWW::Personal
 {
 	// Registers the sinks for what the player does to NPCs (deaths, hits, waking, gifts, trade,
-	// being caught stealing). Call at kDataLoaded.
+	// being caught stealing) and for what the player and party do for each other (heals, rescues,
+	// kills, friendly fire, fights). Call at kDataLoaded.
 	void Register();
+
+	// Forgets the fight in progress (who fought, who was down, who attacked), the crime and barter windows and the rate
+	// limits, and drops work still queued, so none of it carries into another save.
+	// Call on the main thread when a game is loaded or started.
+	void ResetFight();
 
 	// Papyrus natives (script MLWW_Native).
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* a_vm);

@@ -27,6 +27,7 @@ def write(path, text):
 
 
 for fid, eid, script, name, needs_state in QUESTS:
+    alias = 'MLWW_BanterAlias' if script == 'MLWW_Banter' else 'MLWW_PlayerAlias'  # only banter needs OnHit
     props = '    - MutagenObjectType: ScriptObjectProperty\n      Name: PlayerRef\n      Object: 000014:Skyrim.esm\n'
     if needs_state:
         props += f'    - MutagenObjectType: ScriptObjectProperty\n      Name: World\n      Object: {STATE}:{E}\n'
@@ -36,7 +37,7 @@ for fid, eid, script, name, needs_state in QUESTS:
     write(f'esp/Quests/{eid} - {fid}_{E}.yaml',
           f"FormKey: {fid}:{E}\nEditorID: {eid}\nVirtualMachineAdapter:\n  Scripts:\n  - Name: {script}\n    Properties:\n{props}"
           f"  FileName: ''\n  Aliases:\n  - Property:\n      Name: ''\n      Object: {fid}:{E}\n      Alias: 0\n"
-          f"    Scripts:\n    - Name: MLWW_PlayerAlias\n"
+          f"    Scripts:\n    - Name: {alias}\n"
           f"Name:\n  TargetLanguage: English\n  Value: {name}\nFlags:\n- StartGameEnabled\nNextAliasID: 1\n"
           f"Aliases:\n- Name: PlayerAlias\n  Flags: []\n  ForcedReference: 000014:Skyrim.esm\n  VoiceTypes: Null\n")
 for gfid, gname, typ, val, _ in GLOBALS:
@@ -54,20 +55,23 @@ ACTIONS = [
      'parameters': {'method': {'type': 'string', 'enum': ['pay', 'bribe', 'persuade'],
                                'description': 'pay: the player pays the bounty; bribe: the player pays you extra to forget it; persuade: you let a minor bounty go.'}},
      'required': ['method'],
+     'one-on-one': True,
      'prompt': "If you are a guard, steward or Jarl and agree to settle the player's bounty (paid, bribed or persuaded), begin your response with '{key}:'"},
     # Not "ReportCrime": Mantella's Disabled Actions matches by name, and its own ReportCrime is disabled by default.
     {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportWitnessedCrime',
      'description': 'Add a bounty for a crime a witness in this conversation saw the player commit.',
      'key': 'ReportWitnessedCrime',
-     'parameters': {'crime': {'type': 'string', 'enum': ['trespassing', 'lockpicking', 'pickpocketing', 'theft', 'assault', 'murder'],
+     'parameters': {'crime': {'type': 'string', 'enum': ['trespassing', 'lockpicking', 'assault', 'murder'],
                               'description': 'The crime the witness saw.'}},
      'required': ['crime'],
+     # The witness must be another NPC in the talk, so a one-on-one talk can never use it.
+     'one-on-one': False,
      'prompt': "If you are a guard, steward or Jarl and someone here tells you they saw the player commit a crime, begin your response with '{key}:'"},
 ]
 for a in ACTIONS:
     data = {'identifier': a['identifier'], 'name': a['name'], 'description': a['description'], 'note': NOTE, 'key': a['key'],
             'enabled': True, 'lw_gate': 'guard', 'parameters': a['parameters'], 'required': a['required'], 'prompt': a['prompt'],
             'allowed_games': ['skyrim'], 'requires_response': True, 'is-interrupting': False, 'allow_repeat': False,
-            'one-on-one': True, 'multi-npc': True, 'radiant': False}
+            'one-on-one': a['one-on-one'], 'multi-npc': True, 'radiant': False}
     write(f"SKSE/Plugins/MantellaSoftware/data/actions/{a['identifier']}.json", json.dumps(data, indent=4) + '\n')
 print('world records written:', len(QUESTS), 'quests,', len(ACTIONS), 'actions')

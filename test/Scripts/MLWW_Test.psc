@@ -107,7 +107,7 @@ EndFunction
 ; F4: writes observation into the NPC's Knowledge file (npc/<baseid>.json).
 string Function SetObservation(Actor akActor, int aiValue) global
 	string file = "MantellaLivingWorld/npc/" + MLWW_Util.BaseId(akActor) + ".json"
-	JsonUtil.SetPathIntValue(file, ".observation", aiValue)
+	JsonUtil.SetIntValue(file, "observation", aiValue)  ; an int field, where Recognition reads it
 	JsonUtil.Save(file)
 	JsonUtil.Unload(file, false)
 	Return file + " observation=" + aiValue
@@ -139,9 +139,21 @@ int Function BribeCost(int aiBounty) global
 	Return Crime().BribeCost(aiBounty)
 EndFunction
 
+; The waiver and persuade share one free clear per game day per hold (MLWW_Crime KEY_WAIVE + HoldKey).
 string Function ResetPersuade(int aiHold) global
 	StorageUtil.UnsetIntValue(None, "MLWW_PersuadeDay_" + WorldState().HoldName(aiHold))
+	StorageUtil.UnsetIntValue(None, "MLWW_WaiveDay_" + WorldState().HoldName(aiHold))
 	Return "reset"
+EndFunction
+
+; Recognition remembers who has seen the player's face in a talk: forget it so a hood test starts clean.
+string Function ForgetMet(Actor akActor) global
+	StorageUtil.UnsetIntValue(akActor, "MLWW_RecogMet")
+	Return "forgot"
+EndFunction
+
+int Function ThaneMask() global
+	Return WorldState().ThaneMask()
 EndFunction
 
 int Function Gold() global
@@ -275,7 +287,7 @@ string Function ForgetPersonal(Actor akNpc) global
 	keys[1] = "MLWW_WokenAt"
 	keys[2] = "MLWW_Gifts"
 	keys[3] = "MLWW_TradeDay"
-	keys[4] = "MLWW_ChestGold"
+	keys[4] = "MLWW_ChestDay"
 	keys[5] = "MLWW_DiedDay"
 	int i = 0
 	While i < 6
@@ -285,6 +297,7 @@ string Function ForgetPersonal(Actor akNpc) global
 		i += 1
 	EndWhile
 	StorageUtil.UnsetFloatValue(akNpc.GetActorBase(), "MLWW_CaughtDay")
+	StorageUtil.UnsetFloatValue(akNpc, "MLWW_CaughtDay")
 	Return "forgot"
 EndFunction
 
@@ -313,4 +326,102 @@ EndFunction
 
 int Function SleepState(Actor akNpc) global
 	Return akNpc.GetSleepState()
+EndFunction
+
+; E1-E9: game events as facts (MLWW_Facts; MLWW_Listener.dll events)
+; Sends a listener event as the plugin does: sender akSender, text asText, number afNum.
+string Function FakeEvent(Actor akSender, string asEvent, string asText, float afNum) global
+	akSender.SendModEvent(asEvent, asText, afNum)
+	Return "sent"
+EndFunction
+
+; Writes the queued facts now instead of after the 30 second delay.
+string Function WriteFacts() global
+	Personal().WriteQueuedFacts()
+	Return "written"
+EndFunction
+
+string Function SyncFacts(Actor akNpc) global
+	MLWW_Facts.Sync(akNpc)
+	Return "synced"
+EndFunction
+
+; The raw value of one fact in the NPC's file ("day|expires|priority|text"), "" when there is none.
+string Function Fact(Actor akNpc, string asKey) global
+	Return JsonUtil.GetStringValue("MantellaLivingWorld/npc/" + MLWW_Util.BaseId(akNpc) + ".json", asKey)
+EndFunction
+
+string Function ForgetFacts(Actor akNpc) global
+	string[] ints = StringUtil.Split("MLWW_SpentTotal,MLWW_SoldTotal,MLWW_Visits,MLWW_HealedByPlayer,MLWW_HealedPlayer,MLWW_HealedDay,MLWW_SavedByPlayer,MLWW_SavedPlayer,MLWW_SavedDay,MLWW_HitByPlayer,MLWW_HitPlayer,MLWW_HitDay,MLWW_Dungeons,MLWW_DungeonDay,MLWW_BestScore,MLWW_BestDay,MLWW_KillsOwn,MLWW_KillsPlayer,MLWW_Fought,MLWW_FoughtDay,MLWW_Defended,MLWW_DefendedDay,MLWW_TradeDay", ",")
+	int i = 0
+	While i < ints.Length
+		StorageUtil.UnsetIntValue(akNpc, ints[i])
+		i += 1
+	EndWhile
+	StorageUtil.UnsetStringValue(akNpc, "MLWW_BestName")
+	StorageUtil.UnsetStringValue(akNpc, "MLWW_DungeonLast")
+	StorageUtil.StringListClear(akNpc, "MLWW_GoodsNames")
+	StorageUtil.IntListClear(akNpc, "MLWW_GoodsCounts")
+	StorageUtil.UnsetIntValue(None, "MLWW_BestScore")
+	StorageUtil.UnsetStringValue(None, "MLWW_BestName")
+	StorageUtil.UnsetIntValue(None, "MLWW_BestDay")
+	MLWW_Facts.Sync(akNpc)
+	Return "forgot"
+EndFunction
+
+; A dungeon cleared while in the current location (the vanilla stat raised, then the location check).
+string Function ClearDungeon(int aiCount) global
+	WorldState().CheckDungeons(None, 0.0)  ; takes the count first on a save that never had it
+	Game.IncrementStat("Dungeons Cleared", aiCount)
+	WorldState().CheckDungeons(Game.GetPlayer().GetCurrentLocation(), 0.0)
+	Return "cleared " + Game.QueryStat("Dungeons Cleared")
+EndFunction
+
+string Function PartyNames() global
+	Actor[] party = MLWW_Native.Party()
+	string out = ""
+	int i = 0
+	While party && i < party.Length
+		out += party[i].GetDisplayName() + ";"
+		i += 1
+	EndWhile
+	Return party.Length + ": " + out
+EndFunction
+
+; Real engine events: health down, then a spell cast (Skyrim.esm ids, e.g. 0x012FD2 Heal Other, 0x012FD0 Firebolt).
+string Function Hurt(Actor akActor, float afAmount) global
+	akActor.DamageActorValue("Health", afAmount)
+	Return "health " + akActor.GetActorValue("Health")
+EndFunction
+
+string Function CastAt(int aiSpell, Actor akCaster, Actor akTarget) global
+	Spell s = Game.GetFormFromFile(aiSpell, "Skyrim.esm") as Spell
+	s.Cast(akCaster, akTarget)
+	Return "cast " + s.GetName()
+EndFunction
+
+float Function Health(Actor akActor) global
+	Return akActor.GetActorValue("Health")
+EndFunction
+
+; Places one actor of base aiBase (Skyrim.esm, e.g. 0x01BCD8 a bandit) next to the player and has akKiller kill it.
+string Function SpawnKill(int aiBase, Actor akKiller) global
+	Actor victim = Game.GetPlayer().PlaceAtMe(Game.GetFormFromFile(aiBase, "Skyrim.esm"), 1) as Actor
+	victim.Kill(akKiller)
+	Return victim.GetDisplayName() + " level " + victim.GetLevel() + " dead=" + victim.IsDead()
+EndFunction
+
+; Puts a party member into bleedout (made essential for the test; aiRestore 0 sets the flag back afterwards).
+string Function Down(Actor akNpc, int aiRestore) global
+	ActorBase base = akNpc.GetActorBase()
+	If aiRestore == 0
+		bool was = base.IsEssential()
+		StorageUtil.SetIntValue(akNpc, "MLWW_TestWasEssential", was as int)
+		base.SetEssential(true)
+		akNpc.DamageActorValue("Health", akNpc.GetActorValue("Health") + 10.0)
+		Return "bleeding=" + akNpc.IsBleedingOut() + " was essential=" + was
+	EndIf
+	base.SetEssential(StorageUtil.GetIntValue(akNpc, "MLWW_TestWasEssential") as bool)
+	akNpc.RestoreActorValue("Health", 10000.0)
+	Return "essential=" + base.IsEssential()
 EndFunction

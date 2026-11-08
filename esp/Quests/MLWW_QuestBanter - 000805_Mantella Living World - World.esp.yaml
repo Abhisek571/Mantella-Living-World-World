@@ -20,7 +20,7 @@ VirtualMachineAdapter:
       Object: 000805:Mantella Living World - World.esp
       Alias: 0
     Scripts:
-    - Name: MLWW_PlayerAlias
+    - Name: MLWW_BanterAlias
 Name:
   TargetLanguage: English
   Value: Mantella Living World - World banter

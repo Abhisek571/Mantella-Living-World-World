@@ -100,27 +100,28 @@ OUTCOMES = [
     ('cw_side_legion', 'CW01A', lambda q: stage(200), '{player} joined the Imperial Legion.', {'holds': ['Haafingar'], 'factions': ['Legion', 'Stormcloaks']}, 1, {'category': 'civil_war', 'sets': {'war_side': 'Legion'}}),
     ('cw_side_stormcloak', 'CW01B', lambda q: stage(200), '{player} joined the Stormcloaks.', {'holds': ['Eastmarch'], 'factions': ['Stormcloaks', 'Legion']}, 1, {'category': 'civil_war', 'sets': {'war_side': 'Stormcloaks'}}),
     ('cw03_whiterun_message', 'CW03', done, '{player} carried a war message to Jarl Balgruuf of Whiterun.', holds('Whiterun'), 0, {}),
-    ('cw_finale_legion', 'CWFinale', done, '{player} helped the Legion take Windhelm; Ulfric Stormcloak is dead and the rebellion is over.', holds('all'), 3, {'requires': ['cw_side_legion']}),
-    ('cw_finale_stormcloak', 'CWFinale', done, '{player} helped the Stormcloaks take Solitude; General Tullius is dead and Ulfric rules Skyrim.', holds('all'), 3, {'requires': ['cw_side_stormcloak']}),
+    ('cw_finale_legion', 'CWFinale', done, '{player} helped the Legion take Windhelm; Ulfric Stormcloak is dead and the rebellion is over.', holds('all'), 3, {'requires': ['cw_side_legion'], 'supersedes': ['cw_side_legion']}),
+    ('cw_finale_stormcloak', 'CWFinale', done, '{player} helped the Stormcloaks take Solitude; General Tullius is dead and Ulfric rules Skyrim.', holds('all'), 3, {'requires': ['cw_side_stormcloak'], 'supersedes': ['cw_side_stormcloak']}),
     # Companions
     ('c00_companions', 'C00', done, '{player} is a member of the Companions of Jorrvaskr.', {'holds': ['Whiterun'], 'factions': ['Companions']}, 1, {'sets': {'guild': 'Companions', 'rank': 'member'}}),
-    ('c03_circle', 'C03', done, '{player} joined the Circle of the Companions.', {'factions': ['Companions']}, 0, {'sets': {'guild': 'Companions', 'rank': 'Circle'}}),
-    ('c06_harbinger', 'C06', done, '{player} is the Harbinger of the Companions.', {'holds': ['Whiterun'], 'factions': ['Companions']}, 2, {'sets': {'guild': 'Companions', 'rank': 'Harbinger'}}),
+    ('c03_circle', 'C03', done, '{player} joined the Circle of the Companions.', {'factions': ['Companions']}, 0, {'sets': {'guild': 'Companions', 'rank': 'Circle'}, 'supersedes': ['c00_companions']}),
+    ('c06_harbinger', 'C06', done, '{player} is the Harbinger of the Companions.', {'holds': ['Whiterun'], 'factions': ['Companions']}, 2, {'hold': 'Whiterun', 'sets': {'guild': 'Companions', 'rank': 'Harbinger'}, 'supersedes': ['c00_companions', 'c03_circle']}),
     # College of Winterhold
     ('mg01_college', 'MG01', done, '{player} studies at the College of Winterhold.', {'holds': ['Winterhold'], 'factions': ['College of Winterhold']}, 0, {'sets': {'guild': 'College of Winterhold', 'rank': 'apprentice'}}),
-    ('mg08_archmage', 'MG08', done, '{player} is the Arch-Mage of the College of Winterhold.', {'holds': ['Winterhold'], 'factions': ['College of Winterhold']}, 2, {'sets': {'guild': 'College of Winterhold', 'rank': 'Arch-Mage'}}),
+    ('mg08_archmage', 'MG08', done, '{player} is the Arch-Mage of the College of Winterhold.', {'holds': ['Winterhold'], 'factions': ['College of Winterhold']}, 2, {'sets': {'guild': 'College of Winterhold', 'rank': 'Arch-Mage'}, 'supersedes': ['mg01_college']}),
     # Thieves Guild (a secret: only its members know)
     ('tg01_thieves_guild', 'TG01', done, '{player} works for the Thieves Guild in Riften.', {'factions': ['Thieves Guild']}, 0, {'sets': {'guild': 'Thieves Guild', 'rank': 'member'}}),
-    ('tg09_nightingale', 'TG09', done, '{player} is a Nightingale and restored the Thieves Guild.', {'factions': ['Thieves Guild']}, 0, {'sets': {'guild': 'Thieves Guild', 'rank': 'Nightingale'}}),
+    ('tg09_nightingale', 'TG09', done, '{player} is a Nightingale and restored the Thieves Guild.', {'factions': ['Thieves Guild']}, 0, {'sets': {'guild': 'Thieves Guild', 'rank': 'Nightingale'}, 'supersedes': ['tg01_thieves_guild']}),
     # Dark Brotherhood (a secret)
     # Stage 200 is the join; killing Astrid instead sets stage 220 (FailQuest).
     ('db02_brotherhood', 'DB02', lambda q: stage(200), '{player} joined the Dark Brotherhood.', {'factions': ['Dark Brotherhood']}, 0, {'sets': {'guild': 'Dark Brotherhood', 'rank': 'member'}}),
-    ('db11_listener', 'DB11', done, '{player} is the Listener of the Dark Brotherhood; the Emperor was assassinated.', {'factions': ['Dark Brotherhood']}, 0, {'sets': {'guild': 'Dark Brotherhood', 'rank': 'Listener'}}),
+    ('db11_listener', 'DB11', done, '{player} is the Listener of the Dark Brotherhood; the Emperor was assassinated.', {'factions': ['Dark Brotherhood']}, 0, {'sets': {'guild': 'Dark Brotherhood', 'rank': 'Listener'}, 'supersedes': ['db02_brotherhood']}),
     # Thane titles (stage 200 is the title; completed covers patched versions)
     *[(f'thane_{h.lower()}', q, lambda q: {'type': 'any', 'of': [{'type': 'completed'}, stage(200)]},
        f'{{player}} is Thane of {"the " + h if h in ("Reach", "Pale", "Rift") else h}.', holds(h), 2, {'category': 'thane', 'hold': h})
       for q, h in THANE.items()],
-    ('thane_all', 'FavorJarlsMakeFriends', done, '{player} is Thane of every hold in Skyrim.', holds('all'), 1, {'category': 'thane'}),
+    ('thane_all', 'FavorJarlsMakeFriends', done, '{player} is Thane of every hold in Skyrim.', holds('all'), 1,
+     {'category': 'thane', 'supersedes': [f'thane_{h.lower()}' for h in HOLDS]}),
     # Riverwood and Whiterun side quests
     ('ms13_golden_claw', 'MS13', done, '{player} brought the golden claw back to Lucan Valerius in Riverwood.', {'holds': ['Whiterun'], 'named': ['Lucan Valerius', 'Camilla Valerius']}, 1, {}),
     ('riverwood_letter', 'FreeformRiverwood01', done, '{player} carried the love-letter business between Faendal, Sven and Camilla in Riverwood.', {'named': ['Faendal', 'Sven', 'Camilla Valerius']}, 0, {'hold': 'Whiterun'}),
@@ -183,9 +184,7 @@ def build(qjo):
     for rid, quest, when, text, audience, fame, extra in OUTCOMES:
         info = qjo.get((PLUGIN.lower(), quest.lower()), {})
         hold = extra.get('hold', info.get('hold'))
-        aud = {k: list(v) for k, v in audience.items()}
-        if hold and aud.get('holds') and 'all' not in aud['holds'] and hold not in aud['holds']:
-            aud['holds'].append(hold)
+        aud = {k: list(v) for k, v in audience.items()}  # the QJO hold never widens the hand-written audience
         row = {'id': rid, 'quest': quest, 'plugin': PLUGIN, 'form': QUESTS[quest], 'form_hex': '0x%06X' % QUESTS[quest],
                'when': when(quest), 'text': text, 'audience': aud, 'fame': fame, 'hold': hold,
                'category': extra.get('category') or category(quest, info.get('type'), mapping)}
@@ -193,6 +192,8 @@ def build(qjo):
             row['sets'] = extra['sets']
         if 'requires' in extra:
             row['requires'] = extra['requires']
+        if 'supersedes' in extra:
+            row['supersedes'] = extra['supersedes']  # MLWW_State tells only the newer row as an event
         rows.append(row)
     return {'version': 1, 'note': 'Generated by tools/build_quest_outcomes.py; edit OUTCOMES there.',
             'holds': HOLDS, 'count': len(rows), 'rows': rows}
