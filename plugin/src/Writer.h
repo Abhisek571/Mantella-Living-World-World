@@ -30,6 +30,9 @@ namespace MLWW::Writer
 	// Queues a line for said_nearby.json. Never blocks on file I/O.
 	void Push(Line a_line);
 
+	// Forgets every line (queued and written) and empties said_nearby.json. Never blocks on file I/O; any thread.
+	void Clear();
+
 	// Runs a_fn on the worker thread after a_delay. a_fn must not touch game state
 	// directly; it should hand game work back through the SKSE task interface.
 	void RunLater(std::chrono::milliseconds a_delay, std::function<void()> a_fn);

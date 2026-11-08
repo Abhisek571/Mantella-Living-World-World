@@ -168,6 +168,12 @@ namespace MLWW::Listener
 			if (distance > kMaxDistance) {
 				return;
 			}
+			if (actor->IsInCombat() || actor->IsHostileToActor(player)) {
+				return;  // combat barks and enemies' lines are not talk to repeat in the next conversation
+			}
+			if (actor->GetCurrentScene()) {
+				return;  // a quest scene: its actors are not to be pulled into a Mantella talk
+			}
 
 			const auto text = ReadInfoText(info, actor);
 			if (WordCount(text) < kMinWords) {

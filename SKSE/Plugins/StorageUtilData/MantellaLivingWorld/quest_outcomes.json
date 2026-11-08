@@ -352,6 +352,9 @@
    "category": "civil_war",
    "requires": [
     "cw_side_legion"
+   ],
+   "supersedes": [
+    "cw_side_legion"
    ]
   },
   {
@@ -373,6 +376,9 @@
    "hold": null,
    "category": "civil_war",
    "requires": [
+    "cw_side_stormcloak"
+   ],
+   "supersedes": [
     "cw_side_stormcloak"
    ]
   },
@@ -423,7 +429,10 @@
    "sets": {
     "guild": "Companions",
     "rank": "Circle"
-   }
+   },
+   "supersedes": [
+    "c00_companions"
+   ]
   },
   {
    "id": "c06_harbinger",
@@ -437,20 +446,23 @@
    "text": "{player} is the Harbinger of the Companions.",
    "audience": {
     "holds": [
-     "Whiterun",
-     "Winterhold"
+     "Whiterun"
     ],
     "factions": [
      "Companions"
     ]
    },
    "fame": 2,
-   "hold": "Winterhold",
+   "hold": "Whiterun",
    "category": "faction",
    "sets": {
     "guild": "Companions",
     "rank": "Harbinger"
-   }
+   },
+   "supersedes": [
+    "c00_companions",
+    "c03_circle"
+   ]
   },
   {
    "id": "mg01_college",
@@ -502,7 +514,10 @@
    "sets": {
     "guild": "College of Winterhold",
     "rank": "Arch-Mage"
-   }
+   },
+   "supersedes": [
+    "mg01_college"
+   ]
   },
   {
    "id": "tg01_thieves_guild",
@@ -548,7 +563,10 @@
    "sets": {
     "guild": "Thieves Guild",
     "rank": "Nightingale"
-   }
+   },
+   "supersedes": [
+    "tg01_thieves_guild"
+   ]
   },
   {
    "id": "db02_brotherhood",
@@ -595,7 +613,10 @@
    "sets": {
     "guild": "Dark Brotherhood",
     "rank": "Listener"
-   }
+   },
+   "supersedes": [
+    "db02_brotherhood"
+   ]
   },
   {
    "id": "thane_reach",
@@ -866,7 +887,18 @@
    },
    "fame": 1,
    "hold": null,
-   "category": "thane"
+   "category": "thane",
+   "supersedes": [
+    "thane_whiterun",
+    "thane_haafingar",
+    "thane_eastmarch",
+    "thane_rift",
+    "thane_reach",
+    "thane_pale",
+    "thane_falkreath",
+    "thane_hjaalmarch",
+    "thane_winterhold"
+   ]
   },
   {
    "id": "ms13_golden_claw",

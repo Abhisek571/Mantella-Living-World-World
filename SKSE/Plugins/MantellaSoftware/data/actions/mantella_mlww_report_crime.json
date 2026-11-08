@@ -12,8 +12,6 @@
             "enum": [
                 "trespassing",
                 "lockpicking",
-                "pickpocketing",
-                "theft",
                 "assault",
                 "murder"
             ],
@@ -30,7 +28,7 @@
     "requires_response": true,
     "is-interrupting": false,
     "allow_repeat": false,
-    "one-on-one": true,
+    "one-on-one": false,
     "multi-npc": true,
     "radiant": false
 }

@@ -26,6 +26,11 @@ Event OnNpcAdded(Form akActor)
 	If !npc || npc == PlayerRef || npc.IsDead()
 		Return
 	EndIf
+	; Someone who does not know who the player is (hood, shadows) has no "since we last met"; the snapshot waits.
+	MLWW_Recognition recognition = Game.GetFormFromFile(0x000802, "Mantella Living World - World.esp") as MLWW_Recognition
+	If recognition && recognition.Unrecognised(recognition.Verdict(npc))
+		Return
+	EndIf
 	string line = Changes(npc)
 	If line != ""
 		MLWW_Util.Send("meetings", line)
@@ -91,12 +96,17 @@ string Function Changes(Actor akNpc)
 	If n == 0
 		Return ""
 	EndIf
-	int days = (now - last) as int
+	int days = (now as int) - (last as int)  ; calendar days, as the same-day test
 	string when = days + " days ago"
 	If days <= 1
 		when = "yesterday"
 	EndIf
-	string line = akNpc.GetDisplayName() + " last saw " + player + " " + when + "; since then: "
+	; A follower was at the player's side all along: the date is the last talk, not the last sight.
+	string verb = " last saw "
+	If akNpc.IsPlayerTeammate()
+		verb = " last spoke with "
+	EndIf
+	string line = akNpc.GetDisplayName() + verb + player + " " + when + "; since then: "
 	i = 0
 	While i < n
 		If i > 0

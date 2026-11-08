@@ -58,7 +58,7 @@ def test_hold_from_qjo():
     data = built(root)
     by_id = {r['id']: r for r in data['rows']}
     assert by_id['ms13_golden_claw']['hold'] == 'Whiterun'
-    assert 'Whiterun' in by_id['ms13_golden_claw']['audience']['holds']
+    assert by_id['ms13_golden_claw']['audience']['holds'] == ['Whiterun']
     assert by_id['mg08_archmage']['hold'] == 'Winterhold'
     # A quest QJO places nowhere ("none") keeps no hold.
     assert by_id['mq101_helgen']['hold'] is None
@@ -133,6 +133,28 @@ def test_completion_is_not_death():
     spared = by_id['mq_paarthurnax_spared']['when']
     assert spared['type'] == 'all' and {c['type'] for c in spared['of']} == {'completed', 'alive'}
     assert by_id['db02_brotherhood']['when'] == {'type': 'stage', 'stage': 200}
+
+
+def test_supersedes():
+    # A newer rank replaces the older line as an event ("is the Harbinger", not also "joined the Circle").
+    rows = built()['rows']
+    ids = [r['id'] for r in rows]
+    by_id = {r['id']: r for r in rows}
+    for r in rows:
+        for old in r.get('supersedes', []):
+            assert old in ids and old != r['id'], (r['id'], old)
+    assert set(by_id['c06_harbinger']['supersedes']) == {'c00_companions', 'c03_circle'}
+    assert by_id['mg08_archmage']['supersedes'] == ['mg01_college']
+    assert set(by_id['thane_all']['supersedes']) == {f'thane_{h.lower()}' for h in B.HOLDS}
+
+
+def test_qjo_hold_never_widens_audience():
+    # C06 ends at Ysgramor's Tomb (Winterhold): the Harbinger stays Whiterun news.
+    root = fake_qjo({'C06': 'winterholdHold', 'MS13': 'riftHold'})
+    by_id = {r['id']: r for r in built(root)['rows']}
+    assert by_id['c06_harbinger']['audience']['holds'] == ['Whiterun']
+    assert by_id['c06_harbinger']['hold'] == 'Whiterun'
+    assert by_id['ms13_golden_claw']['audience']['holds'] == ['Whiterun']
 
 
 def test_write_is_valid_json():

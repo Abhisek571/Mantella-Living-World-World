@@ -19,6 +19,7 @@ string Property BANTER_FILE = "MantellaLivingWorld/banter.json" AutoReadOnly
 
 bool busy
 bool seeded
+Actor approached  ; brought over for a reason that is forgotten once they speak
 
 Function Register()
 	busy = false
@@ -43,6 +44,10 @@ EndEvent
 
 ; Why they came is for the opening line only; after the first spoken line it would repeat on every reply.
 Event OnMantellaLine(string asEventName, string asText, float afSeconds, Form akSpeaker)
+	If approached
+		Forget(approached)  ; the reason was told
+		approached = None
+	EndIf
 	If seeded
 		seeded = false
 		JsonUtil.SetIntValue(BANTER_FILE, "active", 0)
@@ -51,6 +56,7 @@ Event OnMantellaLine(string asEventName, string asText, float afSeconds, Form ak
 EndEvent
 
 Event OnConversationEnded()
+	approached = None  ; never spoke: the reason stays for another time
 	If seeded
 		seeded = false
 		JsonUtil.SetIntValue(BANTER_FILE, "active", 0)
@@ -93,7 +99,7 @@ Actor Function Scan()
 		Actor npc = StorageUtil.FormListGet(None, KEY_WANTS, i) as Actor
 		If !npc || npc.IsDead()
 			StorageUtil.FormListRemoveAt(None, KEY_WANTS, i)
-		ElseIf npc.Is3DLoaded() && Calm(npc) && !npc.IsHostileToActor(PlayerRef)
+		ElseIf npc.Is3DLoaded() && Calm(npc) && !npc.IsHostileToActor(PlayerRef) && npc.GetCurrentScene() == None
 			float d = npc.GetDistance(PlayerRef)
 			If d <= bestDist
 				best = npc
@@ -105,7 +111,6 @@ Actor Function Scan()
 		Return None
 	EndIf
 	string why = StorageUtil.GetStringValue(best, KEY_WHY)
-	Forget(best)
 	Approach(best, why)
 	Return best
 EndFunction
@@ -130,6 +135,7 @@ Function Approach(Actor akNpc, string asWhy)
 		c.Start()
 		c.StartConversation(actors)
 		c.TriggerApproachMoveAction(akNpc)
+		approached = akNpc
 		MLWW_Util.Log("initiative: " + line)
 		Remember(line)
 	Else
@@ -142,8 +148,17 @@ bool Function Calm(Actor akActor)
 	If akActor.IsInCombat() || (akActor == PlayerRef && (PlayerRef.IsSneaking() || Utility.IsInMenuMode()))
 		Return false
 	EndIf
+	; Riding or running past, in beast form, or held in place by a scene (OStim and others turn movement off).
+	If akActor == PlayerRef && (PlayerRef.IsOnMount() || PlayerRef.IsSprinting() || !Game.IsMovementControlsEnabled() || BeastForm())
+		Return false
+	EndIf
 	Quest c = Game.GetFormFromFile(0x03D41A, "Mantella.esp") as Quest
 	Return !(c && c.IsRunning())
+EndFunction
+
+bool Function BeastForm()
+	Race r = PlayerRef.GetRace()
+	Return r && (r == Game.GetFormFromFile(0x0CDD84, "Skyrim.esm") as Race || r == Game.GetFormFromFile(0x00283A, "Dawnguard.esm") as Race)
 EndFunction
 
 Function Remember(string asLine)

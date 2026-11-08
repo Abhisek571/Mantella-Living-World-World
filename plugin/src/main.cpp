@@ -49,6 +49,12 @@ namespace
 			MLWW::Writer::Start();
 			MLWW::Listener::Register();
 			MLWW::Personal::Register();
+		} else if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kPostLoadGame ||
+				   a_msg->type == SKSE::MessagingInterface::kNewGame) {
+			MLWW::Personal::ResetFight();
+		}
+		if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kNewGame) {
+			MLWW::Writer::Clear();  // lines heard in the game left behind are not nearby in the next one
 		}
 	}
 }

@@ -7,12 +7,18 @@ SettleCrime (only a guard, steward or Jarl; the bounty is the one in the speaker
   pay       the non-violent bounty is paid, stolen goods are taken (vanilla payment); the player confirms first
   bribe     the guard pockets bounty x 1.5 - Speech/100 x bounty x 0.5 gold; stolen goods are kept; the player
             confirms first
-  persuade  free, only a non-violent bounty of 100 or less, once per game day per hold
-  A Thane of the hold, or a player famous there, has a non-violent bounty of 40 or less waived for free.
+  persuade  free, only a non-violent bounty of 100 or less and only when the player's Speech is at least the bounty;
+            stolen goods are taken
+  A Thane of the hold, or a player famous there, has a non-violent bounty of 40 or less waived for free; stolen goods are
+  taken. The waiver and persuade share one free clear per game day per hold.
   Violent crime gold (assault, murder) is never cleared by any of these.
 ReportWitnessedCrime (only a guard, steward or Jarl): adds the vanilla bounty for the crime only when another NPC in
-the conversation (not the player's teammate) is there as the witness who told them. Each crime counts once per
-conversation and once per game day per hold, so reports never add more than one vanilla bounty per crime per day.}
+the conversation (not the player's teammate) is there as the witness who told them, and the game itself backs the
+claim: murder needs a person who was no enemy killed by the player in this hold in the last 3 game days, and is refused
+when the violent bounty there is already 1000 or more; assault needs someone else in the talk (not the guard, not a
+teammate) struck by the player within a day (trespassing and lockpicking need no more). Theft and pickpocketing are not
+reported: the game already charges them when the player is caught. Each crime counts once per conversation and once per game day per hold,
+so reports never add more than one vanilla bounty per crime per day.}
 
 MLWW_State Property World Auto
 
@@ -20,9 +26,13 @@ string Property ACTION_SETTLE = "mantella_mlww_settle_crime" AutoReadOnly
 string Property ACTION_REPORT = "mantella_mlww_report_crime" AutoReadOnly
 string Property ADVANCED = "MantellaConversation_Advanced_Action_" AutoReadOnly
 string Property LEGACY = "MantellaConversation_Action_" AutoReadOnly
-string Property KEY_PERSUADE = "MLWW_PersuadeDay_" AutoReadOnly
 string Property KEY_REPORTED_TALK = "MLWW_ReportedThisTalk" AutoReadOnly
 string Property KEY_REPORT_DAY = "MLWW_ReportDay_" AutoReadOnly
+string Property KEY_LAST_MURDER = "MLWW_LastMurderDay" AutoReadOnly  ; written by MLWW_Personal.OnMurder
+string Property KEY_MURDER_HOLD = "MLWW_LastMurderHold" AutoReadOnly
+string Property KEY_MURDER_FACTION = "MLWW_LastMurderFaction" AutoReadOnly
+int Property MURDER_GOLD = 1000 AutoReadOnly
+string Property KEY_WAIVE = "MLWW_WaiveDay_" AutoReadOnly
 int Property PERSUADE_MAX = 100 AutoReadOnly
 int Property WAIVE_MAX = 40 AutoReadOnly
 int Property FAME_WAIVE = 5 AutoReadOnly
@@ -85,28 +95,31 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 	If violent > 0
 		rest = " The " + violent + " gold for violent crimes stands."
 	EndIf
-	If nonViolent <= WAIVE_MAX && (World.IsThane(hold) || World.Fame(hold) >= FAME_WAIVE)
-		Clear(crime)
+	string waiveKey = KEY_WAIVE + HoldKey(hold, crime)
+	If nonViolent <= WAIVE_MAX && (World.IsThane(hold) || World.Fame(hold) >= FAME_WAIVE) && StorageUtil.GetIntValue(None, waiveKey, -1) != MLWW_Util.Today()
+		StorageUtil.SetIntValue(None, waiveKey, MLWW_Util.Today())
+		ClearTakingGoods(crime, nonViolent, violent)
 		string reason = "out of respect for a Thane of " + where
 		If !World.IsThane(hold)
 			reason = "because " + player + " is well known in " + where
 		EndIf
 		Debug.Notification("Bounty of " + nonViolent + " waived in " + where)
-		Return Tell(who + " waived " + player + "'s " + nonViolent + " gold bounty in " + where + " " + reason + "." + rest)
+		Return Tell(who + " waived " + player + "'s " + nonViolent + " gold bounty in " + where + " " + reason + "; any stolen goods were taken." + rest)
 	EndIf
 	MiscObject gold = Game.GetFormFromFile(0x00000F, "Skyrim.esm") as MiscObject
 	int purse = PlayerRef.GetItemCount(gold)
 	If asMethod == "persuade"
-		string persuadeKey = KEY_PERSUADE + HoldKey(hold, crime)
 		If nonViolent > PERSUADE_MAX
 			Return Tell(player + "'s bounty of " + nonViolent + " gold in " + where + " is too large to talk away; it must be paid.")
-		ElseIf StorageUtil.GetIntValue(None, persuadeKey, -1) == MLWW_Util.Today()
-			Return Tell(player + " already talked a bounty away in " + where + " today; " + who + " will not do it again.")
+		ElseIf StorageUtil.GetIntValue(None, waiveKey, -1) == MLWW_Util.Today()
+			Return Tell(player + " already had a bounty let go in " + where + " today; " + who + " will not do it again.")
+		ElseIf PlayerRef.GetActorValue("Speechcraft") < nonViolent
+			Return Tell(player + " could not talk " + who + " round; the " + nonViolent + " gold bounty in " + where + " stands.")
 		EndIf
-		StorageUtil.SetIntValue(None, persuadeKey, MLWW_Util.Today())
-		Clear(crime)
+		StorageUtil.SetIntValue(None, waiveKey, MLWW_Util.Today())
+		ClearTakingGoods(crime, nonViolent, violent)
 		Debug.Notification("Bounty of " + nonViolent + " forgiven in " + where)
-		Return Tell(who + " let " + player + "'s " + nonViolent + " gold bounty in " + where + " go." + rest)
+		Return Tell(who + " let " + player + "'s " + nonViolent + " gold bounty in " + where + " go; any stolen goods were taken." + rest)
 	ElseIf asMethod == "bribe"
 		int cost = BribeCost(nonViolent)
 		If purse < cost
@@ -115,7 +128,10 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		If abAsk && !PlayerAgrees(who + " will forget your " + nonViolent + " gold bounty in " + where + " for a bribe of " + cost + " gold. You keep any stolen goods. Pay the bribe?", "Pay " + cost + " gold")
 			Return Tell(player + " chose not to pay " + who + " a bribe now; the bounty in " + where + " stands.")
 		EndIf
-		PlayerRef.RemoveItem(gold, cost, true, akSpeaker)
+		If abAsk && crime.GetCrimeGoldNonViolent() <= 0
+			Return Tell(player + "'s bounty in " + where + " was already settled.")
+		EndIf
+		PlayerRef.RemoveItem(gold, cost, true)  ; not to the guard: World would see gold handed to an NPC as a gift
 		Clear(crime)
 		Debug.Notification("Bribe of " + cost + " gold: bounty cleared in " + where)
 		Return Tell(who + " took a " + cost + " gold bribe and cleared " + player + "'s " + nonViolent + " gold bounty in " + where + "." + rest)
@@ -125,6 +141,9 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 	EndIf
 	If abAsk && !PlayerAgrees(who + " offers to settle your " + nonViolent + " gold bounty in " + where + ". Paying also hands over any stolen goods you carry. Pay it?", "Pay " + nonViolent + " gold")
 		Return Tell(player + " chose not to pay the bounty in " + where + " now.")
+	EndIf
+	If abAsk && crime.GetCrimeGoldNonViolent() <= 0
+		Return Tell(player + "'s bounty in " + where + " was already settled.")
 	EndIf
 	; Vanilla payment takes the gold and the stolen goods; violent gold is held aside so only the non-violent part
 	; is charged, then put back.
@@ -149,6 +168,16 @@ EndFunction
 ; Non-violent gold only; SetCrimeGold leaves violent gold untouched.
 Function Clear(Faction akCrime)
 	akCrime.SetCrimeGold(0)
+EndFunction
+
+; A free clear that still takes the stolen goods, like vanilla payment: the player is handed the bounty first, so the
+; payment costs nothing; violent gold is held aside as in pay.
+Function ClearTakingGoods(Faction akCrime, int aiNonViolent, int aiViolent)
+	MiscObject gold = Game.GetFormFromFile(0x00000F, "Skyrim.esm") as MiscObject
+	PlayerRef.AddItem(gold, aiNonViolent, true)
+	akCrime.SetCrimeGoldViolent(0)
+	akCrime.PlayerPayCrimeGold(true, false)
+	akCrime.SetCrimeGoldViolent(aiViolent)
 EndFunction
 
 ; ---------------------------------------------------------------------------
@@ -178,6 +207,10 @@ string Function Report(Actor akSpeaker, MantellaConversation akConversation, str
 	If !witness
 		Return Tell(akSpeaker.GetDisplayName() + " has no witness to the " + asCrime + " here, so no bounty is added.")
 	EndIf
+	string doubt = NoEvidence(asCrime, akSpeaker, akConversation)
+	If doubt != ""
+		Return Tell(doubt + " " + akSpeaker.GetDisplayName() + " adds no bounty for " + asCrime + ".")
+	EndIf
 	Faction crime = akSpeaker.GetCrimeFaction()
 	int hold = World.HoldOfFaction(crime)
 	string where = HoldText(hold, crime)
@@ -197,14 +230,10 @@ string Function Report(Actor akSpeaker, MantellaConversation akConversation, str
 	Return Tell(witness.GetDisplayName() + " reported " + player + " for " + asCrime + "; " + akSpeaker.GetDisplayName() + " added " + gold + " gold to the bounty in " + where + ".")
 EndFunction
 
-; Vanilla bounty values (theft uses the flat 50 a typical stolen item costs; vanilla charges half the item's value).
+; Vanilla bounty values. Theft and pickpocketing give 0: the game charged them when the player was caught.
 int Function CrimeGold(string asCrime)
 	If asCrime == "trespassing" || asCrime == "lockpicking"
 		Return 5
-	ElseIf asCrime == "pickpocketing"
-		Return 25
-	ElseIf asCrime == "theft"
-		Return 50
 	ElseIf asCrime == "assault"
 		Return 40
 	ElseIf asCrime == "murder"
@@ -229,6 +258,49 @@ Actor Function Witness(Actor akGuard, MantellaConversation akConversation)
 		i += 1
 	EndWhile
 	Return None
+EndFunction
+
+; "" when the game backs a report of asCrime, else why not. Only the 5-gold crimes need no game record.
+string Function NoEvidence(string asCrime, Actor akGuard, MantellaConversation akConversation)
+	float now = Utility.GetCurrentGameTime()
+	string player = MLWW_Util.PlayerName()
+	If asCrime == "murder"
+		float murder = StorageUtil.GetFloatValue(None, KEY_LAST_MURDER, -1.0)
+		If murder < 0.0 || now - murder > 3.0
+			Return "Nobody here died by " + player + "'s hand lately."
+		EndIf
+		; Only the hold where it happened: the victim's crime faction, or its hold.
+		Faction crime = akGuard.GetCrimeFaction()
+		int hold = World.HoldOfFaction(crime)
+		int murderHold = StorageUtil.GetIntValue(None, KEY_MURDER_HOLD, -1)
+		Form murderFaction = StorageUtil.GetFormValue(None, KEY_MURDER_FACTION)
+		If !((hold >= 0 && hold == murderHold) || (murderFaction && murderFaction == crime))
+			Return "Nobody in " + HoldText(hold, crime) + " died by " + player + "'s hand lately."
+		EndIf
+		If crime.GetCrimeGoldViolent() >= MURDER_GOLD
+			Return player + "'s bounty in " + HoldText(hold, crime) + " already holds the price of a murder."
+		EndIf
+		Return ""
+	ElseIf asCrime != "assault"
+		Return ""
+	EndIf
+	int i = 0
+	int count = 0
+	If akConversation
+		count = akConversation.CountActorsInConversation()
+	EndIf
+	While i < count
+		Actor other = akConversation.GetActorInConversationByIndex(i)
+		; The guard himself and the player's teammates are no witnesses (as in Witness()).
+		If other && other != PlayerRef && other != akGuard && !other.IsPlayerTeammate()
+			float struck = StorageUtil.GetFloatValue(other, "MLWW_StruckDay", -1.0)
+			If struck >= 0.0 && now - struck <= 1.0
+				Return ""
+			EndIf
+		EndIf
+		i += 1
+	EndWhile
+	Return "Nobody here was struck by " + player + " lately."
 EndFunction
 
 ; ---------------------------------------------------------------------------

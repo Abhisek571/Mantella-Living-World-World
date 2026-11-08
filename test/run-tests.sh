@@ -4,6 +4,7 @@
 # to the module's scripts), the player in or near Whiterun/Riverwood, no helmet or hood on, not Thane of Whiterun or
 # Haafingar yet (F1 and F3 make the player Thane of both: use a throwaway save).
 # usage: bash run-tests.sh                      e.g. SOLITUDE_GUARD=0x000A1D2E bash run-tests.sh
+#        SUITE=events bash run-tests.sh         only the E tests (game events as facts), see there
 #   SOLITUDE_GUARD  a Solitude guard reference for the strangers test (default: Jarl Elisif, also Haafingar)
 set -u
 MO2=${MO2:?set MO2 to your Mod Organizer 2 instance folder}
@@ -30,6 +31,16 @@ except Exception as e:
 print($1)" "$WORLD"
 }
 f() { printf '{"form":"%s"}' "$1"; }
+# A full refresh reads every quest row and takes far longer than one DevBench call may: wait for world.json to change.
+refresh() {
+  local before; before=$(stat -c %Y "$WORLD" 2>/dev/null || echo 0)
+  t Refresh >/dev/null
+  for _ in $(seq 1 90); do
+    [ "$(stat -c %Y "$WORLD" 2>/dev/null || echo 0)" != "$before" ] && { sleep 1; echo "saved good=$(world "'true'")"; return; }
+    sleep 1
+  done
+  echo "saved good=timeout"
+}
 
 LUCAN=$(f 0x13487); CAMILLA=$(f 0x13488); HOD=$(f 0x1348A); BELETHOR=$(f 0x1A672); ADRIANNE=$(f 0x1A67C)
 PROVENTUS=$(f 0x1A67D); STRANGER=$(f "${SOLITUDE_GUARD:-0x198C1}")
@@ -37,6 +48,79 @@ WHITERUN=0
 
 bash "$DB" alive | grep -qi running || { echo "game not running with a save loaded"; exit 2; }
 con "set GameHour to 12"
+# E1-E9 game events as facts: SUITE=events bash run-tests.sh (only this part runs). Needs a follower set as a teammate
+# next to the player and a merchant. The rows send the plugin's own events; the "real" checks go through the engine.
+#   FOLLOWER  the follower's reference (default Lydia, 0xA2C94)   MERCHANT  default Belethor
+if [ "${SUITE:-}" = events ]; then
+  NPC=$(f "${FOLLOWER:-0xA2C94}"); SHOP=$(f "${MERCHANT:-0x1A672}"); PLAYER=$(f 0x14)
+  fact() { t Fact "[$1,\"$2\"]"; }
+  ev() { t FakeEvent "[$1,\"$2\",\"$3\",$4]" >/dev/null; sleep 1; }  # the handler runs after the call returns
+  note "E0 setup"
+  check "follower is in the party" "$(t PartyNames)" "^[1-9]"
+  t ForgetFacts "[$NPC]" >/dev/null; t ForgetFacts "[$SHOP]" >/dev/null
+  check "no facts left after forgetting" "$(fact "$NPC" fact_saved)$(fact "$SHOP" fact_customer)" '^$'
+
+  note "E1 rows: event; text; number; fact key; wanted value (sender: the follower)"
+  while IFS=';' read -r name event text num key want; do
+    [ -z "$name" ] && continue
+    ev "$NPC" "$event" "$text" "$num"; t WriteFacts >/dev/null
+    check "$name" "$(fact "$NPC" "$key")" "$want"
+  done <<'ROWS'
+healed by player once;MLWW_Healed;;1;fact_saved;^[0-9]+\|-1\|3\|With .+: heals 1 to you$
+healed by player twice;MLWW_Healed;;1;fact_saved;: heals 2 to you$
+follower healed player;MLWW_Healed;;0;fact_saved;: heals 2 to you, 1 to them$
+saved by the player;MLWW_Saved;heal;1;fact_saved;: they saved you once; heals 2 to you, 1 to them$
+saved the player;MLWW_Saved;kill;0;fact_saved;: they saved you once, you saved them once; heals
+friendly fire by player;MLWW_FriendlyFire;;1;fact_saved;; hits 1 to you$
+friendly fire on player;MLWW_FriendlyFire;;0;fact_saved;; hits 1 to you, 1 to them$
+fought once;MLWW_Fought;;0;fact_fought;^[0-9]+\|-1\|2\|With .+: 1 fight$
+fought twice;MLWW_Fought;;0;fact_fought;: 2 fights$
+defended;MLWW_Defended;;0;fact_fought;: 2 fights, defended them in 1$
+ROWS
+
+  note "E2 kills and the strongest enemy (sender = killer)"
+  ev "$NPC" MLWW_Kill "Bandit" 12; ev "$PLAYER" MLWW_Kill "Bandit Chief" 20; ev "$NPC" MLWW_Kill "Wolf" 3; t WriteFacts >/dev/null
+  check "kill counts" "$(fact "$NPC" fact_fought)" "; kills you 2, them 1; "
+  check "strongest by level" "$(fact "$NPC" fact_fought)" "; strongest enemy Bandit Chief \(level 20\)$"
+  ev "$PLAYER" MLWW_Kill "Vilkas" 1015; t WriteFacts >/dev/null
+  check "a unique outranks level, no level shown" "$(fact "$NPC" fact_fought)" "; strongest enemy Vilkas$"
+  ev "$NPC" MLWW_Kill "Dragon" 2040; t WriteFacts >/dev/null
+  check "a dragon outranks a unique" "$(fact "$NPC" fact_fought)" "; strongest enemy Dragon$"
+  check "no player's strongest while the follower was there for it" "$(fact "$NPC" fact_fought)" "strongest enemy Dragon$"
+
+  note "E3 good customer (Trade: number = player's gold change)"
+  ev "$SHOP" MLWW_Trade "-1" -4987; ev "$SHOP" MLWW_Trade "-1" 30; t WriteFacts >/dev/null
+  check "spent and sold, one visit" "$(fact "$SHOP" fact_customer)" "^-1\|-1\|1\|.+ spent ~5,000 gold, sold you ~30 in goods$"
+  ev "$SHOP" MLWW_TradeGoods "Iron Dagger" 3; t WriteFacts >/dev/null
+  check "what the player sells most" "$(fact "$SHOP" fact_customer)" ", mostly Iron Dagger$"
+
+  note "E4 dungeon"
+  check "dungeon stat raised" "$(t ClearDungeon '[1]')" "^cleared [0-9]+"
+  check "dungeon fact" "$(fact "$NPC" fact_fought)" "; cleared "
+
+  note "E5 save consistency: no numbers, no fact"
+  t ForgetFacts "[$NPC]" >/dev/null
+  check "facts removed with the numbers" "$(fact "$NPC" fact_saved)$(fact "$NPC" fact_fought)" '^$'
+
+  note "E6 real heal: player casts Heal Other on the hurt follower"
+  t Hurt "[$NPC,60]" >/dev/null; t CastAt "[77778,$PLAYER,$NPC]" >/dev/null; sleep 3; t WriteFacts >/dev/null
+  check "real heal recorded" "$(fact "$NPC" fact_saved)" ": heals 1 to you$"
+
+  note "E7 real kill: the follower kills a placed bandit"
+  check "bandit placed and killed" "$(t SpawnKill "[113880,$NPC]")" "dead=True"
+  sleep 2; t WriteFacts >/dev/null
+  check "real kill counted" "$(fact "$NPC" fact_fought)" "kills you 1, "
+
+  note "E8 real rescue: follower down, player heals within 15 s"
+  check "follower in bleedout" "$(t Down "[$NPC,0]")" "bleeding=True"
+  sleep 1; t CastAt "[77778,$PLAYER,$NPC]" >/dev/null; sleep 3; t WriteFacts >/dev/null
+  check "rescue recorded" "$(fact "$NPC" fact_saved)" ": they saved you once"
+  t Down "[$NPC,1]" >/dev/null
+
+  t ForgetFacts "[$NPC]" >/dev/null; t ForgetFacts "[$SHOP]" >/dev/null
+  note "event tests finished: $PASS passed, $FAIL failed"
+  [ "$FAIL" -eq 0 ]; exit
+fi
 note "setup"
 check "quests running" "$(t Status)" "state=true meetings=true recognition=true pairs=true crime=true"
 check "old-save registration (as on load)" "$(t Reload)" "registered"
@@ -99,11 +183,11 @@ check "report refused: no bounty added" "$(t Bounty "[$WHITERUN]")" "^0/1000$"
 
 note "F1 world state file"
 t SetBounty "[$WHITERUN,40,15]" >/dev/null
-check "refresh saved" "$(t Refresh)" "good=true"
+check "refresh saved" "$(refresh)" "good=true"
 check "world.json bounty Whiterun 55" "$(world "d['bounty']['Whiterun'], d['bounty_violent']['Whiterun']")" "55[^0-9]+15"
 check "world.json has every key" "$(world "sorted(k for k in ['fame','bounty','war_side','thane','guilds','mq_stage','events'] if k not in d)")" '^\[\]$'
 con "completequest Favor253"; sleep 2
-check "refresh after thane stage" "$(t Refresh)" "good=true"
+check "refresh after thane stage" "$(refresh)" "good=true"
 check "world.json: Thane of Whiterun" "$(world "'Whiterun' in d['thane']")" "^True$"
 check "world.json: dated thane event" "$(world "[e['day'] for e in d['events'] if e['id']=='thane_whiterun']")" '^\[[0-9]'
 check "world.json fame Whiterun counts thane" "$(world "d['fame']['Whiterun'] >= 2")" "^True$"
@@ -113,7 +197,7 @@ t EndConversation >/dev/null; t ForgetMeeting "[$LUCAN]" >/dev/null; t ClearSent
 t Join "[$LUCAN]" >/dev/null; sleep 2
 check "first meeting: nothing" "$(t SentCountOf '["meetings"]')" "^0$"
 t EndConversation >/dev/null
-t SetBounty "[$WHITERUN,90,15]" >/dev/null; con "completequest Favor252"; sleep 2; t Refresh >/dev/null
+t SetBounty "[$WHITERUN,90,15]" >/dev/null; con "completequest Favor252"; sleep 2; refresh >/dev/null
 t AgeMeeting "[$LUCAN,2.0]" >/dev/null
 t Join "[$LUCAN]" >/dev/null; sleep 2
 line=$(t LastSent)
@@ -131,6 +215,6 @@ check "thane: minor bounty waived" "$(t Settle "[$PROVENTUS,\"pay\"]")" "waived 
 check "waive: free and cleared" "$(t Bounty "[$WHITERUN]") $(( g0 - $(t Gold) ))" "^0/0 0$"
 
 t SetBounty "[$WHITERUN,0,0]" >/dev/null
-check "world.json still valid at the end" "$(t Refresh) $(world "'ok'")" "good=true.*ok"
+check "world.json still valid at the end" "$(refresh) $(world "'ok'")" "good=true.*ok"
 note "tests finished: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
