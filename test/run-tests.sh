@@ -129,7 +129,7 @@ t GiveGold '[3000]' >/dev/null
 
 note "F4 hiding and recognition (Belethor, observation 2 then 4)"
 con "player.additem 10D6A6 1"; con "player.unequipitem 10D6A6"; sleep 1
-t SetObservation "[$BELETHOR,2]" >/dev/null
+t SetObservation "[$BELETHOR,2]" >/dev/null; t ForgetMet "[$BELETHOR]" >/dev/null
 check "no hood: recognised" "[$(t Verdict "[$BELETHOR]")]" '^\[(None)?\]$'
 con "player.equipitem 10D6A6"; sleep 1
 check "hood, observation 2: not recognised" "$(t Verdict "[$BELETHOR]")" "does not recognise .*hood"
@@ -152,6 +152,7 @@ check "one line per pair" "$(t SentCountOf '["pairs"]')" "^1$"
 t EndConversation >/dev/null; sleep 1
 
 note "F6 settle crime (Proventus, steward of Whiterun)"
+t ResetPersuade "[$WHITERUN]" >/dev/null  # a save from an earlier run on the same game day
 con "player.setav speechcraft 50"
 t SetBounty "[$WHITERUN,40,0]" >/dev/null; g0=$(t Gold)
 check "pay: line" "$(t Settle "[$PROVENTUS,\"pay\"]")" "paid the 40 gold bounty"
@@ -169,16 +170,16 @@ t ResetPersuade "[$WHITERUN]" >/dev/null; t SetBounty "[$WHITERUN,60,0]" >/dev/n
 check "persuade: let go" "$(t Settle "[$PROVENTUS,\"persuade\"]")" "let .* 60 gold bounty .* go"
 check "persuade: cleared, free" "$(t Bounty "[$WHITERUN]") $(( g0 - $(t Gold) ))" "^0/0 0$"
 t SetBounty "[$WHITERUN,60,0]" >/dev/null
-check "second persuade same day refused" "$(t Settle "[$PROVENTUS,\"persuade\"]")" "already talked a bounty away"
+check "second persuade same day refused" "$(t Settle "[$PROVENTUS,\"persuade\"]")" "already had a bounty let go"
 check "second persuade: bounty kept" "$(t Bounty "[$WHITERUN]")" "^60/0$"
-check "refusal sent as event line" "$(t LastSent)" "^crime: .*already talked"
+check "refusal sent as event line" "$(t LastSent)" "^crime: .*already had a bounty let go"
 t ResetPersuade "[$WHITERUN]" >/dev/null; t SetBounty "[$WHITERUN,150,0]" >/dev/null
 check "persuade over 100 refused" "$(t Settle "[$PROVENTUS,\"persuade\"]")" "too large to talk away"
 t SetBounty "[$WHITERUN,0,1000]" >/dev/null
 check "murder only: bribe refused" "$(t Settle "[$PROVENTUS,\"bribe\"]")" "violent crimes"
 check "murder bounty untouched" "$(t Bounty "[$WHITERUN]")" "^0/1000$"
 check "non-guard cannot settle" "$(t Settle "[$HOD,\"pay\"]")" "^Only a guard"
-check "report without witness refused" "$(t ReportNoWitness "[$PROVENTUS,\"theft\"]")" "no witness"
+check "report without witness refused" "$(t ReportNoWitness "[$PROVENTUS,\"assault\"]")" "no witness"  # theft reports were removed
 check "report refused: no bounty added" "$(t Bounty "[$WHITERUN]")" "^0/1000$"
 
 note "F1 world state file"
@@ -197,12 +198,14 @@ t EndConversation >/dev/null; t ForgetMeeting "[$LUCAN]" >/dev/null; t ClearSent
 t Join "[$LUCAN]" >/dev/null; sleep 2
 check "first meeting: nothing" "$(t SentCountOf '["meetings"]')" "^0$"
 t EndConversation >/dev/null
+m0=$(t ThaneMask)
 t SetBounty "[$WHITERUN,90,15]" >/dev/null; con "completequest Favor252"; sleep 2; refresh >/dev/null
+m1=$(t ThaneMask)
 t AgeMeeting "[$LUCAN,2.0]" >/dev/null
 t Join "[$LUCAN]" >/dev/null; sleep 2
 line=$(t LastSent)
 check "next day: one line" "$(t SentCountOf '["meetings"]')" "^1$"
-check "line lists the thane title" "$line" "Thane of Haafingar"
+if [ "$m0" = "$m1" ]; then echo "   SKIP line lists the thane title (this save is already Thane of Haafingar)"; else check "line lists the thane title" "$line" "Thane of Haafingar"; fi
 check "line lists the bounty" "$line" "bounty in Whiterun rose from 55 to 105"
 t EndConversation >/dev/null
 t Join "[$LUCAN]" >/dev/null; sleep 2
@@ -210,6 +213,7 @@ check "same day again: nothing new" "$(t SentCountOf '["meetings"]')" "^1$"
 t EndConversation >/dev/null
 
 note "F6 waive for a Thane"
+t ResetPersuade "[$WHITERUN]" >/dev/null
 t SetBounty "[$WHITERUN,30,0]" >/dev/null; g0=$(t Gold)
 check "thane: minor bounty waived" "$(t Settle "[$PROVENTUS,\"pay\"]")" "waived .* Thane"
 check "waive: free and cleared" "$(t Bounty "[$WHITERUN]") $(( g0 - $(t Gold) ))" "^0/0 0$"

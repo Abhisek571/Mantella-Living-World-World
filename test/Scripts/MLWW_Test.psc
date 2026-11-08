@@ -139,9 +139,21 @@ int Function BribeCost(int aiBounty) global
 	Return Crime().BribeCost(aiBounty)
 EndFunction
 
+; The waiver and persuade share one free clear per game day per hold (MLWW_Crime KEY_WAIVE + HoldKey).
 string Function ResetPersuade(int aiHold) global
 	StorageUtil.UnsetIntValue(None, "MLWW_PersuadeDay_" + WorldState().HoldName(aiHold))
+	StorageUtil.UnsetIntValue(None, "MLWW_WaiveDay_" + WorldState().HoldName(aiHold))
 	Return "reset"
+EndFunction
+
+; Recognition remembers who has seen the player's face in a talk: forget it so a hood test starts clean.
+string Function ForgetMet(Actor akActor) global
+	StorageUtil.UnsetIntValue(akActor, "MLWW_RecogMet")
+	Return "forgot"
+EndFunction
+
+int Function ThaneMask() global
+	Return WorldState().ThaneMask()
 EndFunction
 
 int Function Gold() global
