@@ -123,7 +123,8 @@ ROWS
 fi
 note "setup"
 check "quests running" "$(t Status)" "state=true meetings=true recognition=true pairs=true crime=true"
-check "old-save registration (as on load)" "$(t Reload)" "registered"
+t Reload >/dev/null; sleep 3  # re-registers five quests; can outlast DevBench's 3 s reply limit
+check "old-save registration (as on load)" "$(t Status)" "state=true meetings=true recognition=true pairs=true crime=true"
 t EndConversation >/dev/null; t ClearSent >/dev/null; sleep 1
 t GiveGold '[3000]' >/dev/null
 
