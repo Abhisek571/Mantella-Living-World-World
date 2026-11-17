@@ -95,10 +95,36 @@ for kind, call in KINDS.items():
           f'"{kind}"' in dispatch and call in dispatch and (kind in params['kind']['description'] or kind.split('_')[0] + '_*' in params['kind']['description']), kind)
 check('Trade: an unknown kind and a missing item are refused with a line', 'no kind of trade was named' in dispatch and 'no item was named' in dispatch)
 for p in params:
-    check(f'Trade: handler reads "{p}"', f'getString(aiArguments, "{p}"' in block('Event', 'OnTrade') or f'Amount(aiArguments, "{p}")' in block('Event', 'OnTrade'), p)
+    check(f'Trade: handler reads "{p}"', f'getString(aiArguments, "{p}"' in block('Event', 'OnTrade') or f'Amount(aiArguments, "{p}"' in block('Event', 'OnTrade'), p)
 amount = block('Function', 'Amount')
-check('Amount reads a number only with getInt (getString on a number crashes the game), 0 for zero/negative, capped',
-      'SKSE_HTTP.getInt(aiArguments, asKey, 0)' in amount and 'getString' not in amount and 'Return 0' in amount and 'AMOUNT_MAX' in amount, amount)
+check('Amount reads a number only with getInt (getString on a number crashes the game); negative or over AMOUNT_MAX is -1',
+      'SKSE_HTTP.getInt(aiArguments, asKey, 0)' in amount and 'getString' not in amount
+      and 'If n < 0 || n > aiMax\n\t\tReturn -1' in amount.replace('\r\n', '\n') and 'Return AMOUNT_MAX' not in amount, amount)
+
+
+def trade_refuses(amount, count, price, kind):
+    """A port of Trade's first test: which out-of-range numbers it refuses before anything moves, per kind."""
+    first = dispatch.replace('\r\n', '\n').split('\tEndIf\n', 1)[0]
+    gold, items = ('give_gold', 'ask_gold'), ('give_item', 'ask_item', 'offer_trade')
+    return 'Fail(' in first and ((amount < 0 and kind in gold) or (count < 0 and kind in items) or (price < 0 and kind == 'offer_trade'))
+
+
+check('Trade refuses a negative or absurd number for its kind before anything moves (bounds in the source)',
+      all(s in dispatch for s in ('aiAmount < 0 && (asKind == "give_gold" || asKind == "ask_gold")',
+                                   'aiCount < 0 && (asKind == "give_item" || asKind == "ask_item" || asKind == "offer_trade")',
+                                   'aiPrice < 0 && asKind == "offer_trade"'))
+      and dispatch.find('the amount, count or price named') < dispatch.find('GiveGold(akNpc, aiAmount)'), dispatch[:600])
+for case, want in (((-1, 0, 0, 'give_gold'), True), ((-1, 0, 0, 'give_item'), False), ((0, -1, 0, 'give_item'), True),
+                   ((0, 0, -1, 'offer_trade'), True), ((0, 0, -1, 'ask_item'), False), ((0, 0, 0, 'offer_trade'), False)):
+    check(f'Trade bounds: amount/count/price {case[:3]} for {case[3]} {"refused" if want else "goes on"}', trade_refuses(*case) == want, case)
+_limits = {k: int(v) for k, v in re.findall(r'int Property (AMOUNT_MAX|COUNT_MAX) = (\d+)', TRADE)}
+_reads = block('Event', 'OnTrade')
+for _p, _const in (('amount', 'AMOUNT_MAX'), ('count', 'COUNT_MAX'), ('price', 'AMOUNT_MAX')):
+    _read_max = _limits.get('COUNT_MAX') if f'Amount(aiArguments, "{_p}", COUNT_MAX)' in _reads else \
+        (int(re.search(r'int aiMax = (\d+)', amount).group(1)) if f'Amount(aiArguments, "{_p}")' in _reads else None)
+    check(f"Trade {_p}: the action file's maximum is what the game accepts ({_const})",
+          params[_p].get('maximum') == _limits.get(_const) == _read_max and params[_p].get('minimum') == 1,
+          (params[_p].get('maximum'), _limits.get(_const), _read_max))
 sys.path.insert(0, os.path.join(HUB, 'tools'))
 try:
     import check_action_getters

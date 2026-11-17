@@ -91,6 +91,9 @@ def run(expr, **names):
 # --- the pieces as written ---------------------------------------------------------------------------------------------
 crime_fn, death_fn, place_fn, wit_fn, append_fn = (func(n) for n in ('LogCrime', 'LogDeath', 'PlaceJson', 'WitnessJson', 'AppendRow'))
 check('LogCrime, LogDeath, PlaceJson, WitnessJson and AppendRow exist', all((crime_fn, death_fn, place_fn, wit_fn, append_fn)))
+_waits = [float(w) for w in re.findall(r'Utility\.WaitMenuMode\(\s*(\d*\.?\d+)\s*\)', append_fn or '')]
+check('AppendRow waits for the other writer in steps of at least 0.1 s (shorter Papyrus waits are not reliable)',
+      _waits and min(_waits) >= 0.1, _waits)
 place_expr = expr_after(place_fn, 'Return ')
 wit_head = expr_after(wit_fn, 'out += "{')
 wit_minor = expr_after(wit_fn, 'If a.IsChild()\n\t\t\t\tout += ')

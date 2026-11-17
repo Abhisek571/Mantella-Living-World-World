@@ -280,7 +280,7 @@ EndFunction
 Function AppendRow(string asList, string asRow, string asReplaceId)
 	int tries = 0
 	While crimeLogging && tries < 40
-		Utility.WaitMenuMode(0.05)
+		Utility.WaitMenuMode(0.1)
 		tries += 1
 	EndWhile
 	crimeLogging = true

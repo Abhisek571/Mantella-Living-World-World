@@ -50,7 +50,8 @@ float Property PRICE_MAX = 1.5 AutoReadOnly
 int Property MAX_CARRY = 4 AutoReadOnly   ; items named in carry_items
 int Property MAX_STOCK = 5 AutoReadOnly   ; items named in stock
 int Property MAX_SCAN = 150 AutoReadOnly  ; inventory entries looked at, at most
-int Property AMOUNT_MAX = 100000 AutoReadOnly  ; largest gold amount, count or price an action can name
+int Property AMOUNT_MAX = 100000 AutoReadOnly  ; largest gold amount or price an action can name
+int Property COUNT_MAX = 1000 AutoReadOnly  ; largest count an action can name (the action file's maximum)
 
 bool giftOpen = false
 Actor giftNpc = None
@@ -89,7 +90,7 @@ EndFunction
 ; ---------------------------------------------------------------------------
 
 Event OnTrade(Form akSpeaker, Form akConversation, int aiArguments)
-	Trade(akSpeaker as Actor, SKSE_HTTP.getString(aiArguments, "kind", ""), SKSE_HTTP.getString(aiArguments, "item", ""), Amount(aiArguments, "amount"), Amount(aiArguments, "count"), Amount(aiArguments, "price"))
+	Trade(akSpeaker as Actor, SKSE_HTTP.getString(aiArguments, "kind", ""), SKSE_HTTP.getString(aiArguments, "item", ""), Amount(aiArguments, "amount"), Amount(aiArguments, "count", COUNT_MAX), Amount(aiArguments, "price"))
 	MLWW_Util.ActionDone(ACTION_TRADE)
 EndEvent
 
@@ -101,6 +102,11 @@ EndEvent
 
 ; The kind of trade -> the function that does it, with the asking box on. Returns the event line, for tests.
 string Function Trade(Actor akNpc, string asKind, string asItem, int aiAmount, int aiCount, int aiPrice)
+	If (aiAmount < 0 && (asKind == "give_gold" || asKind == "ask_gold")) \
+		|| (aiCount < 0 && (asKind == "give_item" || asKind == "ask_item" || asKind == "offer_trade")) \
+		|| (aiPrice < 0 && asKind == "offer_trade")
+		Return Fail("Nothing traded: the number named was not a sensible amount", "the amount, count or price named was below one or over what can be traded at once")
+	EndIf
 	If asKind == "give_gold"
 		Return GiveGold(akNpc, aiAmount)
 	ElseIf asKind == "ask_gold"
@@ -119,15 +125,14 @@ string Function Trade(Actor akNpc, string asKind, string asItem, int aiAmount, i
 	Return OfferTrade(akNpc, asItem, aiCount, aiPrice, true)
 EndFunction
 
-; A number argument (declared integer in the action file); 0 when missing, zero or negative, at most AMOUNT_MAX.
-; Read with getInt only: SKSE_HTTP does no type check, and getString on a number crashes the game. The Hub turns a
-; number sent as text into a number before it reaches the game.
-int Function Amount(int aiArguments, string asKey)
+; A number argument (declared integer in the action file); 0 when missing or zero (a count then means one, a price the
+; shop price, a gold amount is refused), -1 when negative or over aiMax (AMOUNT_MAX, COUNT_MAX for a count): Trade
+; refuses it, never quietly turned into one item or into all they carry. Read with getInt only: SKSE_HTTP does no type
+; check, and getString on a number crashes the game. The Hub turns a number sent as text into a number before it reaches the game.
+int Function Amount(int aiArguments, string asKey, int aiMax = 100000)
 	int n = SKSE_HTTP.getInt(aiArguments, asKey, 0)
-	If n <= 0
-		Return 0
-	ElseIf n > AMOUNT_MAX
-		Return AMOUNT_MAX
+	If n < 0 || n > aiMax
+		Return -1
 	EndIf
 	Return n
 EndFunction

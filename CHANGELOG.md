@@ -23,6 +23,9 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
 
 ### Fixed
+- Settle a bounty and take a crime report are offered to Jarls and stewards too, as the actions always said. Needs the Integration Hub update.
+- Trade refuses a negative amount, count or price, or one larger than can be traded at once, with a line in the talk. Before, a negative count became one item and a huge count became everything the NPC carried.
+- The crime list waits for the other writer in steps the game keeps reliably, so two crimes logged at once both stay in the list.
 - Fight accounts no longer carry over to another character loaded without restarting the game.
 - Merchants: World now says whether it read the whole chest (it stops after 150 entries), so the Hub never calls a cut-off list the whole stock.
 - After loading a save made while world.json was being refreshed, only one refresh runs (two could run at once).
