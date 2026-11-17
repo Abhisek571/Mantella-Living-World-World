@@ -90,7 +90,13 @@ Function CheckDungeons(Location akLeft, float afWait = 5.0)
 EndFunction
 
 Event OnConversationStarted()
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_State,OnConversationStarted_start,\n", true, false)
+	EndIf
 	RequestRefresh()
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_State,OnConversationStarted_end,\n", true, false)
+	EndIf
 EndEvent
 
 Event OnReportRequest()
@@ -258,11 +264,13 @@ Function Refresh()
 	refreshed = true
 
 	bool ok = Write(now, player, guildNames, guildRanks, guilds, evJson, evDay, events) && WriteQuests()
-	If ok
-		JsonUtil.Save(WORLD_FILE)
-	Else
-		MLWW_Util.Log("world.json not saved: a value did not parse")
+	If !ok
+		; saved anyway with loading 0: the values that did parse are this game's, and a file left at loading 1 would be
+		; skipped by every reader for the rest of the session
+		MLWW_Util.Log("world.json: a value did not parse; that value keeps its last state")
+		JsonUtil.SetPathIntValue(WORLD_FILE, ".loading", 0)
 	EndIf
+	JsonUtil.Save(WORLD_FILE)
 	busy = false
 EndFunction
 
@@ -509,10 +517,6 @@ Function SetHold(int aiIndex, string asName, int aiLocation, int aiCrimeFaction)
 	crimeFacs[aiIndex] = Game.GetFormFromFile(aiCrimeFaction, "Skyrim.esm") as Faction
 EndFunction
 
-int Function HoldCount()
-	Return 9
-EndFunction
-
 string Function HoldName(int aiHold)
 	Setup()
 	If aiHold < 0 || aiHold >= 9
@@ -620,11 +624,6 @@ EndFunction
 string Function WarSide()
 	EnsureFresh()
 	Return warSideName
-EndFunction
-
-int Function MainQuestStage()
-	EnsureFresh()
-	Return mqStageNow
 EndFunction
 
 ; Testing: forces a refresh now, ignoring the throttle.

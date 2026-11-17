@@ -425,3 +425,69 @@ string Function Down(Actor akNpc, int aiRestore) global
 	akNpc.RestoreActorValue("Health", 10000.0)
 	Return "essential=" + base.IsEssential()
 EndFunction
+
+; ---------------------------------------------------------------------------
+; Trading by talk (SUITE=trade): the trade functions without their Yes/No boxes, and what they leave behind
+; ---------------------------------------------------------------------------
+
+MLWW_Trade Function Trade() global
+	Return Game.GetFormFromFile(0x000808, PLUGIN()) as MLWW_Trade
+EndFunction
+
+string Function TGiveGold(Actor akNpc, int aiAmount) global
+	Return Trade().GiveGold(akNpc, aiAmount)
+EndFunction
+
+string Function TAskGold(Actor akNpc, int aiAmount) global
+	Return Trade().AskGold(akNpc, aiAmount)
+EndFunction
+
+string Function TGiveItem(Actor akNpc, string asItem, int aiCount) global
+	Return Trade().GiveItem(akNpc, asItem, aiCount)
+EndFunction
+
+string Function TAskItem(Actor akNpc, string asItem, int aiCount) global
+	Return Trade().AskItem(akNpc, asItem, aiCount)
+EndFunction
+
+string Function TOffer(Actor akNpc, string asItem, int aiCount, int aiPrice) global
+	Return Trade().OfferTrade(akNpc, asItem, aiCount, aiPrice)
+EndFunction
+
+; The one Trade action's dispatch (kinds that open no Yes/No box: give_gold, give_item, and the refusals).
+string Function TTrade(Actor akNpc, string asKind, string asItem, int aiAmount, int aiCount, int aiPrice) global
+	Return Trade().Trade(akNpc, asKind, asItem, aiAmount, aiCount, aiPrice)
+EndFunction
+
+int Function TCredit(Actor akNpc) global
+	Return Trade().Credit(akNpc)
+EndFunction
+
+string Function TFree(Actor akNpc) global
+	Return "free=" + Trade().Free(akNpc) + " noask=" + Trade().TradesFree(akNpc) + " merchant=" + (Trade().Chest(akNpc) != None)
+EndFunction
+
+; What WriteCarry left in the NPC's file: "gold|items|merchant|stock".
+string Function TCarry(Actor akNpc) global
+	Trade().WriteCarry(akNpc)
+	string path = "MantellaLivingWorld/npc/" + MLWW_Util.BaseId(akNpc) + ".json"
+	Return JsonUtil.GetIntValue(path, "carry_gold", -1) + "|" + JsonUtil.GetStringValue(path, "carry_items") + "|" + JsonUtil.GetIntValue(path, "merchant", -1) + "|" + JsonUtil.GetStringValue(path, "stock")
+EndFunction
+
+int Function TItemCount(ObjectReference akIn, string asItem) global
+	Form f = Trade().FindItem(akIn, asItem)
+	If !f
+		Return -1
+	EndIf
+	Return akIn.GetItemCount(f)
+EndFunction
+
+int Function NpcGold(Actor akNpc) global
+	Return akNpc.GetItemCount(Game.GetFormFromFile(0x00000F, "Skyrim.esm"))
+EndFunction
+
+string Function TStartTalk() global
+	int handle = ModEvent.Create("MantellaConversation_Started")
+	ModEvent.Send(handle)
+	Return "started"
+EndFunction

@@ -3,7 +3,10 @@ Scriptname MLWW_Recognition extends MLWW_Job
 unseen, or hides their face under a hood or helmet in a hold where they are not famous, Mantella is told the NPC
 does not recognise the player. People who know the player personally still do: friends, family, followers, a
 Thane's hold, and anyone who has seen the player's face in a talk before. Outside any hold a hood hides nothing. Uncanny observers (observation 4+
-in Knowledge's observation.json, else the NPC's file npc/<baseid>.json, default 2) see through it, and Mantella is told that instead.}
+in Knowledge's observation.json, else the NPC's file npc/<baseid>.json, default 2) see through it, and Mantella is told that instead.
+Whether a hood or helmet covers the player's face is also kept in MantellaLivingWorld/recognition.json (int face_hidden),
+written whenever the player's gear changes and on each game load, so Mantella's side knows it before a talk starts and
+can tell the NPC in the greeting itself (the event below only reaches the talk after the greeting).}
 
 MLWW_State Property World Auto
 
@@ -16,22 +19,50 @@ int Property FAME_KNOWN = 3 AutoReadOnly
 int Property SLOT_HEAD = 0x00000001 AutoReadOnly
 int Property SLOT_HAIR = 0x00000002 AutoReadOnly
 string Property KEY_MET = "MLWW_RecogMet" AutoReadOnly
+string Property FACE_FILE = "MantellaLivingWorld/recognition.json" AutoReadOnly
 
 Function Register()
 	RegisterForModEvent("MantellaConversation_NPC_Added", "OnNpcAdded")
+	WriteFace()
+EndFunction
+
+Function PlayerGearChanged()
+	WriteFace()
+EndFunction
+
+; 1 while a hood, helmet or mask covers the player's face; written only when it changed.
+Function WriteFace()
+	int hidden = 0
+	If FaceHidden()
+		hidden = 1
+	EndIf
+	If !JsonUtil.HasIntValue(FACE_FILE, "face_hidden") || JsonUtil.GetIntValue(FACE_FILE, "face_hidden", -1) != hidden
+		JsonUtil.SetIntValue(FACE_FILE, "face_hidden", hidden)
+		JsonUtil.Save(FACE_FILE)
+	EndIf
 EndFunction
 
 Event OnNpcAdded(Form akActor)
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Recognition,OnNpcAdded_start,\n", true, false)
+	EndIf
 	Actor npc = akActor as Actor
 	If !npc || npc == PlayerRef || npc.IsDead()
 		Return
 	EndIf
+	WriteFace()  ; kept fresh for the next talk's greeting
 	string line = Verdict(npc)
+	; kept for Meetings in the same join, so the verdict is worked out once
+	StorageUtil.SetStringValue(npc, "MLWW_Verdict", line)
+	StorageUtil.SetFloatValue(npc, "MLWW_VerdictAt", Utility.GetCurrentRealTime())
 	If line != ""
 		MLWW_Util.Send("recognition", line)
 	EndIf
 	If !Unrecognised(line)
 		StorageUtil.SetIntValue(npc, KEY_MET, 1)  ; they have seen the player as they are now
+	EndIf
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Recognition,OnNpcAdded_end,\n", true, false)
 	EndIf
 EndEvent
 
@@ -49,7 +80,7 @@ string Function Verdict(Actor akNpc)
 		If seesThrough
 			Return npc + " senses " + player + " sneaking nearby and knows who it is."
 		EndIf
-		Return npc + " does not recognise " + player + ", who stays hidden out of sight."
+		Return npc + " does not recognise the stranger who stays hidden out of sight."  ; never the name to someone who does not know it
 	EndIf
 	If !FaceHidden() || KnowsPersonally(akNpc)
 		Return ""
@@ -61,7 +92,7 @@ string Function Verdict(Actor akNpc)
 	If seesThrough
 		Return npc + " sees through " + player + "'s hood and knows who they are."
 	EndIf
-	Return npc + " does not recognise " + player + ": a hood hides their face."
+	Return npc + " does not recognise the hooded stranger: a hood hides their face."  ; never the name (live test 15)
 EndFunction
 
 int Function Observation(Actor akNpc)

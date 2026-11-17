@@ -72,6 +72,10 @@ bool Function Watching()
 EndFunction
 
 Function PlayerHit()
+	; a trap, a stray arrow or a friendly spell is no fight; banter off: nothing to watch for
+	If !PlayerRef.IsInCombat() || !MLWW_BanterOn || MLWW_BanterOn.GetValueInt() != 1
+		Return
+	EndIf
 	If !watchingFight
 		watchingFight = true
 		fightCheckAt = Utility.GetCurrentRealTime() + 5.0
@@ -84,12 +88,12 @@ Function FightOver()
 EndFunction
 
 Function TwoOfTheParty(string asWhat)
-	If pendingA || talking
+	If pendingA || talking || !Roll()  ; the dice first: no party search when nothing would be said
 		Return
 	EndIf
 	Actor a = PickPartyMember(None)
 	Actor b = PickPartyMember(a)
-	If a && b && Roll()
+	If a && b
 		Plan(a, b, asWhat + " " + a.GetDisplayName() + " speaks to " + b.GetDisplayName() + " about it. Only " + a.GetDisplayName() + " speaks now: one short sentence.")
 	EndIf
 EndFunction
@@ -247,14 +251,14 @@ EndFunction
 
 ; A random party member near the player that is not akNot, or None.
 Actor Function PickPartyMember(Actor akNot)
-	; MiscUtil.ScanCellNPCs crashes the game in Skyrim VR.
-	ObjectReference[] near = PO3_SKSEFunctions.FindAllReferencesOfFormType(PlayerRef, 62, RADIUS)
+	; the plugin's own list of the party here (no reference scan; MiscUtil.ScanCellNPCs crashes the game in Skyrim VR)
+	Actor[] near = MLWW_Native.Party()
 	Actor[] party = new Actor[16]
 	int n = 0
 	int i = 0
-	While i < near.Length && n < 16
-		Actor a = near[i] as Actor
-		If a && a != PlayerRef && a != akNot && a.IsPlayerTeammate() && !a.IsInCombat() && Near(a)
+	While near && i < near.Length && n < 16
+		Actor a = near[i]
+		If a && a != PlayerRef && a != akNot && !a.IsInCombat() && Near(a)
 			party[n] = a
 			n += 1
 		EndIf

@@ -37,6 +37,28 @@ Function Send(string asSource, string asLine) global
 	Log(asSource + ": " + asLine)
 EndFunction
 
+; A short HUD line for what an action did, unless "Action notifications" is off in the Hub's MCM (MLW_ActionHud; an
+; older Hub without it counts as on). Same switch as the Hub's MLW_Notify.Hud, read here so World needs no new Hub script.
+Function Hud(string asText) global
+	If asText == ""
+		Return
+	EndIf
+	GlobalVariable on = None
+	If Hub()
+		on = Game.GetFormFromFile(0x00080D, HUB_PLUGIN()) as GlobalVariable
+	EndIf
+	If !on || on.GetValueInt() != 0
+		Debug.Notification(asText)
+	EndIf
+EndFunction
+
+; What an action did: a HUD line (Hud) and the same news for the NPCs in the talk as an in-game event line, so they know
+; whether it worked. asSource names the job in the troubleshooting report.
+Function Result(string asSource, string asHud, string asFact) global
+	Hud(asHud)
+	Send(asSource, asFact)
+EndFunction
+
 ; Tells Mantella an action that requires a response has finished.
 Function ActionDone(string asIdentifier) global
 	int handle = ModEvent.Create("Mantella_ActionResponseCompleted")
@@ -116,4 +138,55 @@ EndFunction
 ; Today as a whole game day.
 int Function Today() global
 	Return Utility.GetCurrentGameTime() as int
+EndFunction
+
+; ---------------------------------------------------------------------------
+; Thalmor
+; ---------------------------------------------------------------------------
+
+; In the Thalmor (ThalmorFaction, Skyrim.esm 0x039F26).
+bool Function IsThalmor(Actor akActor) global
+	Faction thalmor = Game.GetFormFromFile(0x039F26, "Skyrim.esm") as Faction
+	Return akActor && thalmor && akActor.IsInFaction(thalmor)
+EndFunction
+
+; Thalmor, or the Imperial Legion (CWImperialFaction, Skyrim.esm 0x02BF9A): company that minds harm to a Thalmor.
+bool Function SidesWithThalmor(Actor akActor) global
+	Faction legion = Game.GetFormFromFile(0x02BF9A, "Skyrim.esm") as Faction
+	Return IsThalmor(akActor) || (akActor && legion && akActor.IsInFaction(legion))
+EndFunction
+
+; In one of the big walled cities (LocTypeCity: Whiterun, Solitude, Windhelm, Markarth, Riften), inside a building too.
+bool Function InCity(Location akLocation) global
+	Keyword city = Game.GetFormFromFile(0x013168, "Skyrim.esm") as Keyword
+	Location here = akLocation
+	int depth = 0
+	While here && city && depth < 8
+		If here.HasKeyword(city)
+			Return true
+		EndIf
+		here = PO3_SKSEFunctions.GetParentLocation(here)
+		depth += 1
+	EndWhile
+	Return false
+EndFunction
+
+; Harm the player did to a Thalmor, as one clause for a fact line: "the victim was Thalmor", plus "folk here do not much
+; care" outside the big walled cities when neither akNpc nor anyone in the running talk is Thalmor or Legion (ordinary
+; Nords and village folk have no love for the Thalmor and their Talos ban). Only words: bounties stay the game's.
+string Function ThalmorClause(Actor akNpc) global
+	If InCity(Game.GetPlayer().GetCurrentLocation()) || SidesWithThalmor(akNpc)
+		Return "the victim was Thalmor"
+	EndIf
+	MantellaConversation talk = Game.GetFormFromFile(0x03D41A, "Mantella.esp") as MantellaConversation
+	If talk && talk.IsRunning()
+		int i = talk.CountActorsInConversation()
+		While i > 0
+			i -= 1
+			If SidesWithThalmor(talk.GetActorInConversationByIndex(i))
+				Return "the victim was Thalmor"
+			EndIf
+		EndWhile
+	EndIf
+	Return "the victim was Thalmor, and folk here do not much care"
 EndFunction

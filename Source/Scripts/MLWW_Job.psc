@@ -19,3 +19,7 @@ EndFunction
 ; Called by the player alias when the player is hit.
 Function PlayerHit()
 EndFunction
+
+; Called by the player alias when the player puts on or takes off armour or clothing.
+Function PlayerGearChanged()
+EndFunction

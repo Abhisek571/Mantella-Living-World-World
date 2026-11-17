@@ -18,7 +18,9 @@ claim: murder needs a person who was no enemy killed by the player in this hold 
 when the violent bounty there is already 1000 or more; assault needs someone else in the talk (not the guard, not a
 teammate) struck by the player within a day (trespassing and lockpicking need no more). Theft and pickpocketing are not
 reported: the game already charges them when the player is caught. Each crime counts once per conversation and once per game day per hold,
-so reports never add more than one vanilla bounty per crime per day.}
+so reports never add more than one vanilla bounty per crime per day. When the murdered or struck person was Thalmor,
+the report line says so (MLWW_Util.ThalmorClause: folk outside the big walled cities do not much care); the bounty is
+the same.}
 
 MLWW_State Property World Auto
 
@@ -47,7 +49,13 @@ EndFunction
 
 ; A new conversation: crimes reported in the last one may be reported again (still once per day per hold).
 Event OnTalkStarted()
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Crime,OnTalkStarted_start,\n", true, false)
+	EndIf
 	StorageUtil.StringListClear(None, KEY_REPORTED_TALK)
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Crime,OnTalkStarted_end,\n", true, false)
+	EndIf
 EndEvent
 
 ; ---------------------------------------------------------------------------
@@ -103,7 +111,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		If !World.IsThane(hold)
 			reason = "because " + player + " is well known in " + where
 		EndIf
-		Debug.Notification("Bounty of " + nonViolent + " waived in " + where)
+		Notify("Bounty of " + nonViolent + " waived in " + where)
 		Return Tell(who + " waived " + player + "'s " + nonViolent + " gold bounty in " + where + " " + reason + "; any stolen goods were taken." + rest)
 	EndIf
 	MiscObject gold = Game.GetFormFromFile(0x00000F, "Skyrim.esm") as MiscObject
@@ -118,7 +126,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		EndIf
 		StorageUtil.SetIntValue(None, waiveKey, MLWW_Util.Today())
 		ClearTakingGoods(crime, nonViolent, violent)
-		Debug.Notification("Bounty of " + nonViolent + " forgiven in " + where)
+		Notify("Bounty of " + nonViolent + " forgiven in " + where)
 		Return Tell(who + " let " + player + "'s " + nonViolent + " gold bounty in " + where + " go; any stolen goods were taken." + rest)
 	ElseIf asMethod == "bribe"
 		int cost = BribeCost(nonViolent)
@@ -133,7 +141,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		EndIf
 		PlayerRef.RemoveItem(gold, cost, true)  ; not to the guard: World would see gold handed to an NPC as a gift
 		Clear(crime)
-		Debug.Notification("Bribe of " + cost + " gold: bounty cleared in " + where)
+		Notify("Bribe of " + cost + " gold: bounty cleared in " + where)
 		Return Tell(who + " took a " + cost + " gold bribe and cleared " + player + "'s " + nonViolent + " gold bounty in " + where + "." + rest)
 	EndIf
 	If purse < nonViolent
@@ -150,7 +158,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 	crime.SetCrimeGoldViolent(0)
 	crime.PlayerPayCrimeGold(true, false)
 	crime.SetCrimeGoldViolent(violent)
-	Debug.Notification("Paid " + nonViolent + " gold bounty in " + where)
+	Notify("Paid " + nonViolent + " gold bounty in " + where)
 	Return Tell(player + " paid the " + nonViolent + " gold bounty in " + where + " to " + who + "; any stolen goods were taken." + rest)
 EndFunction
 
@@ -226,8 +234,46 @@ string Function Report(Actor akSpeaker, MantellaConversation akConversation, str
 	StorageUtil.StringListAdd(None, KEY_REPORTED_TALK, reportKey, false)
 	StorageUtil.SetIntValue(None, dayKey, MLWW_Util.Today())
 	crime.ModCrimeGold(gold, asCrime == "assault" || asCrime == "murder")
-	Debug.Notification(gold + " bounty added in " + where)
-	Return Tell(witness.GetDisplayName() + " reported " + player + " for " + asCrime + "; " + akSpeaker.GetDisplayName() + " added " + gold + " gold to the bounty in " + where + ".")
+	Notify(gold + " bounty added in " + where)
+	string thalmor = ""
+	If ThalmorVictim(asCrime, akSpeaker, akConversation)
+		thalmor = " (" + MLWW_Util.ThalmorClause(akSpeaker) + ")"
+	EndIf
+	Return Tell(witness.GetDisplayName() + " reported " + player + " for " + asCrime + thalmor + "; " + akSpeaker.GetDisplayName() + " added " + gold + " gold to the bounty in " + where + ".")
+EndFunction
+
+; The reported murder or assault was of a Thalmor: the murder this hold's report rests on (MLWW_Personal.OnMurder keeps
+; the flag beside each day), or someone in the talk the player struck within a day.
+bool Function ThalmorVictim(string asCrime, Actor akGuard, MantellaConversation akConversation)
+	If asCrime == "murder"
+		Faction crime = akGuard.GetCrimeFaction()
+		int hold = World.HoldOfFaction(crime)
+		float here = -1.0
+		bool thalmor = false
+		If hold >= 0 && StorageUtil.HasFloatValue(None, "MLWW_MurderDay_" + hold)
+			here = StorageUtil.GetFloatValue(None, "MLWW_MurderDay_" + hold)
+			thalmor = StorageUtil.GetIntValue(None, "MLWW_MurderThalmor_" + hold) > 0
+		EndIf
+		If crime && StorageUtil.GetFloatValue(crime, "MLWW_MurderDay", -1.0) > here
+			thalmor = StorageUtil.GetIntValue(crime, "MLWW_MurderThalmor") > 0
+		EndIf
+		Return thalmor
+	ElseIf asCrime != "assault" || !akConversation
+		Return false
+	EndIf
+	float now = Utility.GetCurrentGameTime()
+	int i = akConversation.CountActorsInConversation()
+	While i > 0
+		i -= 1
+		Actor other = akConversation.GetActorInConversationByIndex(i)
+		If other && other != PlayerRef && other != akGuard && MLWW_Util.IsThalmor(other)
+			float struck = StorageUtil.GetFloatValue(other, "MLWW_StruckDay", -1.0)
+			If struck >= 0.0 && now - struck <= 1.0
+				Return true
+			EndIf
+		EndIf
+	EndWhile
+	Return false
 EndFunction
 
 ; Vanilla bounty values. Theft and pickpocketing give 0: the game charged them when the player was caught.
@@ -352,7 +398,20 @@ string Function Name(Actor akActor)
 	Return akActor.GetDisplayName()
 EndFunction
 
+; The HUD line of a result (MLWW_Util.Hud, off with "Action notifications"); Tell shows the whole line when none was set.
+bool notified = false
+
+Function Notify(string asText)
+	MLWW_Util.Hud(asText)
+	notified = true
+EndFunction
+
+; Every result goes to the talk as an event line, and to the HUD (refusals too, so the player sees why nothing happened).
 string Function Tell(string asLine)
+	If !notified
+		MLWW_Util.Hud(asLine)
+	EndIf
+	notified = false
 	MLWW_Util.Send("crime", asLine)
 	Return asLine
 EndFunction

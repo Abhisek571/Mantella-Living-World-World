@@ -23,6 +23,8 @@ Actor approached  ; brought over for a reason that is forgotten once they speak
 
 Function Register()
 	busy = false
+	approached = None  ; a talk from before the load is over, even if its Ended never came
+	seeded = false
 	RegisterForModEvent("MantellaConversation_Ended", "OnConversationEnded")
 	RegisterForModEvent("MLWW_MantellaLine", "OnMantellaLine")
 	RegisterForModEvent("MLW_ReportRequest", "OnReportRequest")
@@ -45,8 +47,10 @@ EndEvent
 ; Why they came is for the opening line only; after the first spoken line it would repeat on every reply.
 Event OnMantellaLine(string asEventName, string asText, float afSeconds, Form akSpeaker)
 	If approached
-		Forget(approached)  ; the reason was told
-		approached = None
+		If akSpeaker == approached
+			Forget(approached)  ; the reason was told
+		EndIf
+		approached = None  ; someone else spoke: their talk is another one (its Ended was missed), the reason stays
 	EndIf
 	If seeded
 		seeded = false
