@@ -33,6 +33,9 @@ namespace MLWW::Writer
 	// Forgets every line (queued and written) and empties said_nearby.json. Never blocks on file I/O; any thread.
 	void Clear();
 
+	// Replaces a_file with a_text on the worker thread (through a temp file, so a reader never sees half of it).
+	void Save(std::filesystem::path a_file, std::string a_text);
+
 	// Runs a_fn on the worker thread after a_delay. a_fn must not touch game state
 	// directly; it should hand game work back through the SKSE task interface.
 	void RunLater(std::chrono::milliseconds a_delay, std::function<void()> a_fn);

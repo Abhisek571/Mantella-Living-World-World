@@ -62,19 +62,12 @@ namespace MLWW::Writer
 			}
 		}
 
-		void WriteFile()
+		void WriteText(const std::filesystem::path& a_file, const std::string& text)
 		{
-			nlohmann::json root;
-			root["lines"] = nlohmann::json::array();
-			for (auto& line : g_lines) {
-				root["lines"].push_back(line);
-			}
-			const auto text = root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
-
 			std::error_code ec;
-			std::filesystem::create_directories(kFile.parent_path(), ec);
+			std::filesystem::create_directories(a_file.parent_path(), ec);
 
-			auto tmp = kFile;
+			auto tmp = a_file;
 			tmp += L".tmp";
 			{
 				std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
@@ -88,17 +81,33 @@ namespace MLWW::Writer
 					return;
 				}
 			}
-			// std::filesystem::rename replaces an existing target on Windows.
-			std::filesystem::rename(tmp, kFile, ec);
+			// std::filesystem::rename replaces an existing target on Windows, but not while a reader has it open (the
+			// Mantella side reading it): wait that out briefly, so a reader never sees a half-written file.
+			std::filesystem::rename(tmp, a_file, ec);
+			for (int tries = 0; ec && tries < 25; ++tries) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+				ec.clear();
+				std::filesystem::rename(tmp, a_file, ec);
+			}
 			if (ec) {
 				// Fallback: direct write, so the data still lands even if rename is refused.
-				logger::warn("rename to {} failed ({}), writing directly", kFile.string(), ec.message());
-				std::ofstream out(kFile, std::ios::binary | std::ios::trunc);
+				logger::warn("rename to {} failed ({}), writing directly", a_file.string(), ec.message());
+				std::ofstream out(a_file, std::ios::binary | std::ios::trunc);
 				if (out) {
 					out.write(text.data(), static_cast<std::streamsize>(text.size()));
 				}
 				std::filesystem::remove(tmp, ec);
 			}
+		}
+
+		void WriteFile()
+		{
+			nlohmann::json root;
+			root["lines"] = nlohmann::json::array();
+			for (auto& line : g_lines) {
+				root["lines"].push_back(line);
+			}
+			WriteText(kFile, root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 		}
 
 		void Worker()
@@ -184,6 +193,11 @@ namespace MLWW::Writer
 							  } });
 		}
 		g_cv.notify_one();
+	}
+
+	void Save(std::filesystem::path a_file, std::string a_text)
+	{
+		RunLater(0ms, [file = std::move(a_file), text = std::move(a_text)]() { WriteText(file, text); });
 	}
 
 	void RunLater(std::chrono::milliseconds a_delay, std::function<void()> a_fn)

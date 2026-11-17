@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this program.
 // If not, see <https://www.gnu.org/licenses/>.
 
+#include "Battle.h"
 #include "Listener.h"
 #include "Personal.h"
 #include "Writer.h"
@@ -52,6 +53,7 @@ namespace
 		} else if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kPostLoadGame ||
 				   a_msg->type == SKSE::MessagingInterface::kNewGame) {
 			MLWW::Personal::ResetFight();
+			MLWW::Battle::Reset(a_msg->type == SKSE::MessagingInterface::kNewGame);
 		}
 		if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kNewGame) {
 			MLWW::Writer::Clear();  // lines heard in the game left behind are not nearby in the next one

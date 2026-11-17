@@ -26,6 +26,12 @@ namespace MLWW::Personal
 	// Call on the main thread when a game is loaded or started.
 	void ResetFight();
 
+	// A follower set as a teammate and with the player (not told to wait somewhere); a summon is not one. Main thread.
+	bool InParty(RE::Actor* a_actor);
+
+	// Party members who are here now (loaded and close to the player). Main thread.
+	std::vector<RE::Actor*> PartyHere();
+
 	// Papyrus natives (script MLWW_Native).
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* a_vm);
 }

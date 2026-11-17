@@ -14,6 +14,7 @@
 
 #include "Personal.h"
 
+#include "Battle.h"
 #include "Writer.h"
 
 #include <atomic>
@@ -176,6 +177,7 @@ namespace MLWW::Personal
 				SKSE::GetTaskInterface()->AddTask([]() {
 					CheckCrime();
 					CheckParty();
+					Battle::Tick();
 				});
 				PollCrime();  // re-armed from the worker thread, never from inside the task
 			});
@@ -819,6 +821,7 @@ namespace MLWW::Personal
 		}
 		static Sink<RE::TESDeathEvent> death([](const RE::TESDeathEvent& e) {
 			OnPartyDeathEvent(e);
+			Battle::Death(e);
 			if (e.dead) {
 				auto*            victim = e.actorDying ? e.actorDying->As<RE::Actor>() : nullptr;
 				auto*            player = Player();
@@ -831,6 +834,7 @@ namespace MLWW::Personal
 		});
 		static Sink<RE::TESHitEvent> hit([](const RE::TESHitEvent& e) {
 			OnPartyHitEvent(e);
+			Battle::Hit(e);
 			auto* player = Player();
 			auto* actor = e.target ? e.target->As<RE::Actor>() : nullptr;
 			if (!actor || !e.cause || e.cause.get() != player || actor->IsPlayerTeammate() || actor->IsCommandedActor()) {
@@ -839,8 +843,17 @@ namespace MLWW::Personal
 			const bool hostile = actor->IsHostileToActor(player);
 			Task([target = e.target, source = e.source, hostile]() { OnHit(target, source, hostile); });
 		});
-		static Sink<RE::TESMagicEffectApplyEvent> magic(OnMagicEffectEvent);
-		static Sink<RE::TESEnterBleedoutEvent>    bleedout(OnBleedoutEvent);
+		static Sink<RE::TESMagicEffectApplyEvent> magic([](const RE::TESMagicEffectApplyEvent& e) {
+			OnMagicEffectEvent(e);
+			Battle::Magic(e);
+		});
+		static Sink<RE::TESSpellCastEvent> cast([](const RE::TESSpellCastEvent& e) {
+			Battle::Cast(e);
+		});
+		static Sink<RE::TESEnterBleedoutEvent> bleedout([](const RE::TESEnterBleedoutEvent& e) {
+			OnBleedoutEvent(e);
+			Battle::Bleedout(e);
+		});
 		static Sink<RE::TESActivateEvent> activate([](const RE::TESActivateEvent& e) {
 			// The sleep state is read right away: the activation is what wakes them.
 			if (e.actionRef && e.actionRef.get() == Player()) {
@@ -848,8 +861,11 @@ namespace MLWW::Personal
 			}
 		});
 		static Sink<RE::TESContainerChangedEvent> moved([](const RE::TESContainerChangedEvent& e) {
-			auto*        player = Player();
-			RE::TESForm* owner = player && e.newContainer == player->GetFormID() ? OwnerOfTake(e.oldContainer, e.reference) : nullptr;
+			auto* player = Player();
+			if (!player || (e.newContainer != player->GetFormID() && e.oldContainer != player->GetFormID())) {
+				return;  // only the player's own gains and losses matter (OnMoved): no task for every loot or restock
+			}
+			RE::TESForm* owner = e.newContainer == player->GetFormID() ? OwnerOfTake(e.oldContainer, e.reference) : nullptr;
 			Task([from = e.oldContainer, to = e.newContainer, base = e.baseObj, count = e.itemCount, owner]() { OnMoved(from, to, base, count, owner); });
 		});
 		static Sink<RE::MenuOpenCloseEvent> menu([](const RE::MenuOpenCloseEvent& e) {
@@ -864,6 +880,7 @@ namespace MLWW::Personal
 		holder->AddEventSink<RE::TESDeathEvent>(&death);
 		holder->AddEventSink<RE::TESHitEvent>(&hit);
 		holder->AddEventSink<RE::TESMagicEffectApplyEvent>(&magic);
+		holder->AddEventSink<RE::TESSpellCastEvent>(&cast);
 		holder->AddEventSink<RE::TESEnterBleedoutEvent>(&bleedout);
 		holder->AddEventSink<RE::TESActivateEvent>(&activate);
 		holder->AddEventSink<RE::TESContainerChangedEvent>(&moved);
@@ -875,6 +892,7 @@ namespace MLWW::Personal
 				}
 			}
 		}
+		Battle::Start();
 		PollCrime();
 		logger::info("personal event listeners registered ({} crime factions)", g_crimeFactions.size());
 	}
@@ -906,6 +924,10 @@ namespace MLWW::Personal
 		g_playerLow = {};
 		g_health.clear();
 	}
+
+	bool InParty(RE::Actor* a_actor) { return IsMember(a_actor); }
+
+	std::vector<RE::Actor*> PartyHere() { return PartyNow(); }
 
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* a_vm)
 	{
