@@ -125,7 +125,14 @@ check('a full scan notes its game time first, so a rest event during it asks for
 check('no quest is read one by one in Papyrus any more', 'Quest.GetQuest' not in STATE and 'GetStage()' not in STATE)
 qb = body('Function', 'QuestBatch')
 check('a quest batch re-reads only changed quests and looks at the outcome table only when needed',
-      'MLWW_Native.ReadChangedQuests()' in qb and re.search(r'If changed > 0\s+questStages', qb) is not None and 'MLWW_Native.OutcomeQuestsChanged() || deathDue' in qb)
+      'MLWW_Native.ReadChangedQuests()' in qb and re.search(r'If changed > 0\s+KeepQuestJson\(\)', qb) is not None and 'MLWW_Native.OutcomeQuestsChanged() || deathDue' in qb)
+# live test 18: a save holding these strings (over 5 KB each) crashed on load, in the engine's read of the save's string
+# table; the long JSON lives in PapyrusUtil's storage, never in a script variable
+script_vars = re.findall(r'^string\s+(\w+)\s*=', STATE, re.M)
+check('no script variable keeps the quest or event JSON (kept in StorageUtil, out of the Papyrus string table)',
+      not {'questStages', 'questStates', 'eventJson'} & set(script_vars)
+      and 'StorageUtil.SetStringValue(None, KEY_QUEST_STAGES' in body('Function', 'KeepQuestJson')
+      and 'StorageUtil.SetStringValue(None, KEY_EVENTS' in STATE, script_vars)
 check('the quest JSON is never replaced by an empty read', re.search(r'If questStages == "" \|\| questStates == ""\s+Return true', body('Function', 'WriteQuestJson')) is not None)
 check('World still works without Knowledge (the quest list is read through JsonUtil, no Knowledge script)', 'MLWK_' not in STATE)
 
@@ -515,6 +522,12 @@ def scenario_not_ready():
           and 'Schedule()' in fresh.group(0))
     check('State.Ready says whether the first scan is done', re.search(r'bool Function Ready\(\)\s*EnsureFresh\(\)\s*Return cached', state) is not None)
     check('Recognition gives no hood line before the first scan', '!World.Ready()' in src('MLWW_Recognition.psc'))
+    face = re.search(r'(?m)^bool Function FaceHidden\(\).*?^EndFunction', src('MLWW_Recognition.psc'), re.S)
+    face = face.group(0) if face else ''
+    # live test 18: a wig in the hair slot made every NPC see "the hooded stranger"
+    check('a hair-slot piece hides the face only as a hood (ArmorHelmet or ClothingHead), never a wig',
+          'IsWig(hair)' in face and '0x06C0EE' in face and '0x10CD11' in face and 'IsWig(head)' in face
+          and 'Return head != None' not in face)
     meet = re.search(r'(?m)^Event OnNpcAdded\(.*?^EndEvent', src('MLWW_Meetings.psc'), re.S)
     check('Meetings stores no snapshot before the first scan', meet is not None
           and 0 <= meet.group(0).find('!World.Ready()') < meet.group(0).find('Changes('))

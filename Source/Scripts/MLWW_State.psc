@@ -28,6 +28,11 @@ float Property TALK_FRESH = 5.0 AutoReadOnly       ; a talk start this soon afte
 int Property FAME_MAX = 10 AutoReadOnly
 int Property MAX_EVENTS = 128 AutoReadOnly  ; every true row; the Hub picks per audience
 string Property KEY_SCANNED = "MLWW_Scanned" AutoReadOnly
+; The long JSON (quest progress, outcome events) is kept in PapyrusUtil's storage, never in a script variable: a saved
+; Papyrus string of several KB makes the save crash on load (the quest table alone is over 5 KB).
+string Property KEY_EVENTS = "MLWW_EventJson" AutoReadOnly
+string Property KEY_QUEST_STAGES = "MLWW_QuestStagesJson" AutoReadOnly
+string Property KEY_QUEST_STATES = "MLWW_QuestStatesJson" AutoReadOnly
 string Property KEY_SEEN = "MLWW_Seen_" AutoReadOnly
 string Property KEY_DUNGEONS = "MLWW_DungeonsSeen" AutoReadOnly
 
@@ -44,9 +49,6 @@ bool dungeonBusy = false
 bool cached = false
 int[] rowFame          ; fame from the outcome table, before the stat bonus
 string guildJson = "{}"
-string eventJson = "[]"
-string questStages = ""
-string questStates = ""
 float lastFullDay = -1000.0  ; game time of the last full scan
 string lastWhy = ""
 float lastTook = 0.0
@@ -395,8 +397,7 @@ bool Function QuestBatch()
 	deathDue = false
 	batches += 1
 	If changed > 0
-		questStages = MLWW_Native.QuestStagesJson()
-		questStates = MLWW_Native.QuestStatesJson()
+		KeepQuestJson()
 		WriteQuestJson()
 	EndIf
 	If table
@@ -411,8 +412,7 @@ EndFunction
 Function ReadAllQuests()
 	string[] wanted = JsonUtil.StringListToArray(QUESTS_WANTED, "quests")
 	questCount = MLWW_Native.ReadQuests(wanted)
-	questStages = MLWW_Native.QuestStagesJson()
-	questStates = MLWW_Native.QuestStatesJson()
+	KeepQuestJson()
 	WriteQuestJson()
 EndFunction
 
@@ -578,7 +578,7 @@ Function EvalOutcomes()
 	warSideName = newWar
 	mqStageNow = newMq
 	guildJson = guildsOut + "}"
-	eventJson = NewestEvents(evJson, evDay, events)
+	StorageUtil.SetStringValue(None, KEY_EVENTS, NewestEvents(evJson, evDay, events))
 	WriteOutcomes()
 EndFunction
 
@@ -703,7 +703,7 @@ bool Function WriteOutcomes()
 	EndWhile
 	bool ok = JsonUtil.SetRawPathValue(WORLD_FILE, ".thane", thaneJson + "]")
 	ok = JsonUtil.SetRawPathValue(WORLD_FILE, ".guilds", guildJson) && ok
-	ok = JsonUtil.SetRawPathValue(WORLD_FILE, ".events", eventJson) && ok
+	ok = JsonUtil.SetRawPathValue(WORLD_FILE, ".events", StorageUtil.GetStringValue(None, KEY_EVENTS, "[]")) && ok
 	ok = JsonUtil.SetRawPathValue(WORLD_FILE, ".war_side", MLWW_Util.Quote(warSideName)) && ok
 	JsonUtil.SetPathIntValue(WORLD_FILE, ".mq_stage", mqStageNow)
 	If !ok
@@ -717,7 +717,14 @@ EndFunction
 ; as Knowledge lists them (the plugin writes the JSON).
 string Property QUESTS_WANTED = "MantellaLivingWorld/knowledge_quests.json" AutoReadOnly
 
+Function KeepQuestJson()
+	StorageUtil.SetStringValue(None, KEY_QUEST_STAGES, MLWW_Native.QuestStagesJson())
+	StorageUtil.SetStringValue(None, KEY_QUEST_STATES, MLWW_Native.QuestStatesJson())
+EndFunction
+
 bool Function WriteQuestJson()
+	string questStages = StorageUtil.GetStringValue(None, KEY_QUEST_STAGES, "")
+	string questStates = StorageUtil.GetStringValue(None, KEY_QUEST_STATES, "")
 	If questStages == "" || questStates == ""
 		Return true  ; nothing read yet (or the plugin is missing): the file keeps what it has
 	EndIf

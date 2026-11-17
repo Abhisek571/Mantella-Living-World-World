@@ -106,7 +106,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 	string waiveKey = KEY_WAIVE + HoldKey(hold, crime)
 	; the free paths take any stolen goods too, so they ask first; a No to the waiver goes on with the method asked for
 	; (a bribe keeps the goods)
-	If nonViolent <= WAIVE_MAX && (World.IsThane(hold) || World.Fame(hold) >= FAME_WAIVE) && StorageUtil.GetIntValue(None, waiveKey, -1) != MLWW_Util.Today() 			&& (!abAsk || PlayerAgrees(who + " will waive your " + nonViolent + " gold bounty in " + where + ", but any stolen goods you carry are handed over. Accept?", "Accept"))
+	If nonViolent <= WAIVE_MAX && (World.IsThane(hold) || World.Fame(hold) >= FAME_WAIVE) && StorageUtil.GetIntValue(None, waiveKey, -1) != MLWW_Util.Today() 			&& (!abAsk || PlayerAgrees("Bounty waived by " + who + ": your " + nonViolent + " gold bounty in " + where + " is dropped, but any stolen goods you carry are handed over. Accept?", "Accept"))
 		If abAsk && crime.GetCrimeGoldNonViolent() <= 0
 			Return Tell(player + "'s bounty in " + where + " was already settled.")
 		EndIf
@@ -129,7 +129,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		ElseIf PlayerRef.GetActorValue("Speechcraft") < nonViolent
 			Return Tell(player + " could not talk " + who + " round; the " + nonViolent + " gold bounty in " + where + " stands.")
 		EndIf
-		If abAsk && !PlayerAgrees(who + " will let your " + nonViolent + " gold bounty in " + where + " go, but any stolen goods you carry are handed over. Accept?", "Accept")
+		If abAsk && !PlayerAgrees("Bounty let go by " + who + ": your " + nonViolent + " gold bounty in " + where + " is dropped, but any stolen goods you carry are handed over. Accept?", "Accept")
 			Return Tell(player + " chose not to hand over stolen goods to " + who + "; the " + nonViolent + " gold bounty in " + where + " stands.")
 		EndIf
 		If abAsk && crime.GetCrimeGoldNonViolent() <= 0
@@ -144,7 +144,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		If purse < cost
 			Return Tell(player + " cannot afford the " + cost + " gold bribe for a " + nonViolent + " gold bounty in " + where + ".")
 		EndIf
-		If abAsk && !PlayerAgrees(who + " will forget your " + nonViolent + " gold bounty in " + where + " for a bribe of " + cost + " gold. You keep any stolen goods. Pay the bribe?", "Pay " + cost + " gold")
+		If abAsk && !PlayerAgrees("Bribe to " + who + ": pay " + cost + " gold and your " + nonViolent + " gold bounty in " + where + " is forgotten. You keep any stolen goods. Pay the bribe?", "Pay " + cost + " gold")
 			Return Tell(player + " chose not to pay " + who + " a bribe now; the bounty in " + where + " stands.")
 		EndIf
 		If abAsk && crime.GetCrimeGoldNonViolent() <= 0
@@ -158,7 +158,7 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 	If purse < nonViolent
 		Return Tell(player + " cannot afford to pay the " + nonViolent + " gold bounty in " + where + ".")
 	EndIf
-	If abAsk && !PlayerAgrees(who + " offers to settle your " + nonViolent + " gold bounty in " + where + ". Paying also hands over any stolen goods you carry. Pay it?", "Pay " + nonViolent + " gold")
+	If abAsk && !PlayerAgrees("Bounty payment to " + who + ": pay " + nonViolent + " gold for your bounty in " + where + "; any stolen goods you carry are handed over too. Pay it?", "Pay " + nonViolent + " gold")
 		Return Tell(player + " chose not to pay the bounty in " + where + " now.")
 	EndIf
 	If abAsk && crime.GetCrimeGoldNonViolent() <= 0

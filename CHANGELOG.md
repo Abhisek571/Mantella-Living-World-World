@@ -23,6 +23,9 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
 
 ### Fixed
+- Saves made after the quest scan ran could not be loaded (the game crashed while reading the save): two script strings of over 5 KB (the quest progress JSON) were kept in the save. The quest progress and the outcome events now live in PapyrusUtil's storage. Saves already made with them stay unloadable; make a new save after updating.
+- A wig or hair piece in the hair slot no longer counts as a hood: only a piece made to be worn over the head (helmet or hood keywords) hides your face.
+- Trade and bounty boxes name the action: "Gold to <name>", "Item to <name>", "Purchase from <name>", "Bounty waived by", "Bribe to", "Bounty payment to", with amounts and prices.
 - A save made while a crime row was being written no longer makes every later crime row wait 4 seconds. Kept dialogue menu lines of another character are never filed under this one after a damaged menu dialogue file, and each kept fight keeps the player it was fought by.
 - The Thane or fame waiver and persuading a guard ask before they hand over stolen goods; saying no to the waiver goes on with the bribe or payment asked for.
 - Items handed to an NPC by talk are credited at what a merchant would pay, a stranger's goods cost the barter menu price, and an item handed over as payment no longer counts as a gift.

@@ -196,7 +196,7 @@ string Function AskGold(Actor akNpc, int aiAmount, bool abAsk = false)
 	bool chose = false
 	string all = ""
 	If abAsk && !TradesFree(akNpc)
-		int answer = Confirm("Give " + who + " " + aiAmount + " gold? (you have " + purse + ")", "Give " + aiAmount + " gold", "Type an amount of gold, like 2000.")
+		int answer = Confirm("Gold to " + who + ": hand " + who + " " + aiAmount + " gold from your purse? You have " + purse + " gold.", "Give " + aiAmount + " gold", "Type an amount of gold, like 2000.")
 		If answer < 0
 			Return Fail("You kept your gold", player + " chose not to hand over the " + aiAmount + " gold")
 		ElseIf answer > 0
@@ -301,7 +301,7 @@ string Function AskItem(Actor akNpc, string asItem, int aiCount, bool abAsk = fa
 	int asked = count
 	bool chose = false
 	If abAsk && !TradesFree(akNpc)
-		int answer = Confirm("Give " + who + " " + Pieces(item, count) + "? (you have " + have + ")", "Give it", "Type how many, like 3, or gold instead, like 50 gold.")
+		int answer = Confirm("Item to " + who + ": hand " + who + " " + Pieces(item, count) + " from your inventory? You have " + have + ".", "Give it", "Type how many, like 3, or gold instead, like 50 gold.")
 		If answer < 0
 			Return Fail("You kept the " + item.GetName(), player + " chose not to hand over " + Pieces(item, count))
 		ElseIf answer > 0 && typedGold
@@ -395,7 +395,7 @@ string Function OfferTrade(Actor akNpc, string asItem, int aiCount, int aiPrice,
 	int offered = price
 	bool chose = false
 	If abAsk && !TradesFree(akNpc)
-		int answer = Confirm(who + " sells you " + Pieces(item, count) + " for " + price + " gold (shop price " + fair + ", you have " + purse + "). Buy it?", "Buy for " + price + " gold", "Type the gold you pay, like " + price + ".")
+		int answer = Confirm("Purchase from " + who + ": buy " + Pieces(item, count) + " for " + price + " gold? Shop price " + fair + " gold; you have " + purse + " gold.", "Buy for " + price + " gold", "Type the gold you pay, like " + price + ".")
 		If answer < 0
 			Return Fail("Trade declined", player + " declined to buy " + Pieces(item, count) + " for " + price + " gold")
 		ElseIf answer > 0

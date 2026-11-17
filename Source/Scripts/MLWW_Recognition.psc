@@ -111,12 +111,28 @@ int Function Observation(Actor akNpc)
 	Return JsonUtil.GetIntValue(file, "observation", OBSERVATION_DEFAULT)
 EndFunction
 
+; Something in the head slot (a helmet, a mask), or a hood in the hair slot. The hair slot alone counts only for a piece
+; made to be worn over the head (the ArmorHelmet or ClothingHead keyword): wigs and hair pieces use that slot too, and
+; never hide the face (live test 18: a wig made every NPC see a hooded stranger). A piece named as a wig never counts.
 bool Function FaceHidden()
 	Armor head = PlayerRef.GetWornForm(SLOT_HEAD) as Armor
-	If !head
-		head = PlayerRef.GetWornForm(SLOT_HAIR) as Armor
+	If head && !IsWig(head)
+		Return true
 	EndIf
-	Return head != None
+	Armor hair = PlayerRef.GetWornForm(SLOT_HAIR) as Armor
+	If !hair || hair == head || IsWig(hair)
+		Return false
+	EndIf
+	Keyword helmet = Game.GetFormFromFile(0x06C0EE, "Skyrim.esm") as Keyword    ; ArmorHelmet
+	Keyword clothingHead = Game.GetFormFromFile(0x10CD11, "Skyrim.esm") as Keyword  ; ClothingHead
+	Return (helmet && hair.HasKeyword(helmet)) || (clothingHead && hair.HasKeyword(clothingHead))
+EndFunction
+
+; A worn piece whose name has the word "wig" (wig, Wig or WIG; brackets and dashes count as spaces).
+bool Function IsWig(Armor akPiece)
+	string name = " " + akPiece.GetName() + " "
+	name = MLWW_Util.Replace(MLWW_Util.Replace(MLWW_Util.Replace(MLWW_Util.Replace(name, "(", " "), ")", " "), "-", " "), ",", " ")
+	Return StringUtil.Find(name, " wig ") >= 0 || StringUtil.Find(name, " Wig ") >= 0 || StringUtil.Find(name, " WIG ") >= 0
 EndFunction
 
 ; Friends, lovers, family, followers and anyone the player has spent time with know the voice and the walk.
