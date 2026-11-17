@@ -290,7 +290,9 @@ check('worker-thread callbacks only queue tasks', not worker_bad, worker_bad)
 
 # ResetFight forgets every piece of fight, crime and barter state the poll and the tasks keep.
 reset = SRC[FUNCS['ResetFight'][1]:FUNCS['ResetFight'][2]]
-state = set(re.findall(r'^\s*(?:std::[\w:]+<[^;]*>|[\w:]+)\s+(g_\w+)', SRC, re.M)) - {'g_crimeFactions', 'g_epoch'}
+# Not per-game: the crime factions and the quest index (editor id -> quest) are found once at kDataLoaded, and the
+# outcome table's quests are the same in every save (MLWW_State hands them over again on each full scan).
+state = set(re.findall(r'^\s*(?:std::[\w:]+<[^;]*>|[\w:]+)\s+(g_\w+)', SRC, re.M)) - {'g_crimeFactions', 'g_epoch', 'g_questsById', 'g_outcomeQuests'}
 # Set before every use, behind a guard that ResetFight clears: g_barterGold whenever g_barterTarget is set (barter menu
 # open), g_fightStart and g_lastCombat whenever g_inFight turns true.
 GUARDED = {'g_barterGold': 'g_barterTarget', 'g_fightStart': 'g_inFight', 'g_lastCombat': 'g_inFight'}
@@ -489,7 +491,7 @@ kq = os.path.join(CODING, 'Mantella-Living-World-Knowledge', 'SKSE', 'Plugins', 
 if os.path.isfile(kq):
     data = json.load(open(kq, encoding='utf-8'))
     ok = isinstance(data.get('stringList', {}).get('quests'), list)
-    check('knowledge_quests.json holds the "quests" string list MLWW_State.WriteQuests reads', ok and 'JsonUtil.StringListCount(QUESTS_WANTED, "quests")' in state)
+    check('knowledge_quests.json holds the "quests" string list MLWW_State.ReadAllQuests reads', ok and 'JsonUtil.StringListToArray(QUESTS_WANTED, "quests")' in state)
 else:
     warn('knowledge_quests.json', 'Knowledge not checked out next to World; reader not checked')
 

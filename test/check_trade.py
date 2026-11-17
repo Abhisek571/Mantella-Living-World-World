@@ -80,6 +80,10 @@ check('Trade: needs a response (the result comes back to the talk)', data.get('r
 first = re.split(r'(?<=[.!?])\s+', data.get('description', '').strip(), maxsplit=1)[0]
 check('Trade: its first sentence tells offer_trade (a named item for a talked price) from Barter (the shop menu)',
       'offer_trade' in first and 'Barter' in first and 'price' in first, first)
+# Live test 15: "once agreed (a named item at a price agreed in talk is offer_trade ...)" kept "I'd like to buy a Potion
+# of Minor Healing" (no price said) on Barter. A ware asked for by name is offer_trade, at the shop price when none is agreed.
+check('Trade: a ware asked for by name is offer_trade with no price agreed (shop price); no "once agreed" condition',
+      'asks to buy by name' in first and 'shop price' in first and 'once agreed' not in first and 'price agreed in talk' not in first, first)
 check('Trade: no gate (offer_trade is refused by the game for anyone who is no merchant)', not data.get('lw_gate'), data.get('lw_gate'))
 KINDS = {'give_gold': 'GiveGold(akNpc, aiAmount)', 'ask_gold': 'AskGold(akNpc, aiAmount, true)', 'give_item': 'GiveItem(akNpc, asItem, aiCount)',
          'ask_item': 'AskItem(akNpc, asItem, aiCount, true)', 'offer_trade': 'OfferTrade(akNpc, asItem, aiCount, aiPrice, true)',

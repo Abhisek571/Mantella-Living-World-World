@@ -80,13 +80,16 @@ ACTIONS = [
     # Trading by talk (MLWW_Trade): one action, the kind of trade inside. The Hub keeps only the first sentence of the
     # description (the action has no gate), so that sentence holds the stranger rule.
     {'identifier': 'mantella_mlww_trade', 'name': 'Trade', 'note': TRADE_NOTE + " offer_trade is for merchants only.",
-     'description': "Move real gold or goods between you and the player once agreed; a stranger pays only for what the player handed over first.",
+     'description': "Moves real gold or goods: a merchant sells a ware the player asks to buy by name with offer_trade, at the shop price unless another was agreed (Barter only opens the shop menu to browse); a stranger pays only for what the player handed over first.",
+     # live test 14: "a named item at the agreed price" lost "from their wares", and with "you give only what you carry"
+     # Lucan refused a potion his chest held ("not among what I'm carrying"); OfferTrade takes no price as the shop price
+     # live test 15: "once agreed ... a price agreed in talk" kept a plain "I'd like to buy X" (no price) on Barter
      'parameters': {'kind': {'type': 'string', 'enum': ['give_gold', 'ask_gold', 'give_item', 'ask_item', 'offer_trade', 'take_gift'],
                              'description': 'give_*: you hand over what you carry; ask_*: the player hands it to you; '
-                                            'offer_trade: a merchant sells from their wares; take_gift: open the gift menu for the player.'},
+                                            'offer_trade: a merchant sells a ware asked for from the shop; take_gift: opens the gift menu.'},
                     'amount': dict(AMOUNT, description='Gold, for give_gold and ask_gold.'),
                     'item': ITEM, 'count': COUNT,
-                    'price': dict(AMOUNT, description='Agreed price in gold for all of it, for offer_trade.')},
+                    'price': dict(AMOUNT, description='offer_trade: the agreed gold for all of it; leave out for the shop price.')},
      'required': ['kind'],
      # Without arguments (Advanced Actions off) only the gift menu can be opened, as TakeGift did.
      'prompt': "When the player wants to give you something, begin your response with '{key}:'"},

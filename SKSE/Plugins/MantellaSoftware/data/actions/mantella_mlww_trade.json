@@ -1,7 +1,7 @@
 {
     "identifier": "mantella_mlww_trade",
     "name": "Trade",
-    "description": "Moves real gold or goods once agreed (a named item at a price agreed in talk is offer_trade; Barter only opens the shop menu); a stranger pays only for what the player handed over first.",
+    "description": "Moves real gold or goods: a merchant sells a ware the player asks to buy by name with offer_trade, at the shop price unless another was agreed (Barter only opens the shop menu to browse); a stranger pays only for what the player handed over first.",
     "note": "Needs Mantella Living World - World and Advanced Actions on in Mantella (it names the amount or the item). Followers, friends and lovers give and take freely; a stranger hands over gold or goods only as payment for what you handed them in the same talk. Anything you hand over asks you Yes/No first. offer_trade is for merchants only.",
     "key": "Trade",
     "enabled": true,
@@ -16,7 +16,7 @@
                 "offer_trade",
                 "take_gift"
             ],
-            "description": "give_*: you hand over what you carry; ask_*: the player hands it to you; offer_trade: a merchant sells a named item at the agreed price; take_gift: opens the gift menu."
+            "description": "give_*: you hand over what you carry; ask_*: the player hands it to you; offer_trade: a merchant sells a ware asked for from the shop; take_gift: opens the gift menu."
         },
         "amount": {
             "type": "integer",
@@ -38,7 +38,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100000,
-            "description": "offer_trade: the agreed gold for all of it."
+            "description": "offer_trade: the agreed gold for all of it; leave out for the shop price."
         }
     },
     "required": [

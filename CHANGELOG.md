@@ -19,6 +19,8 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - With Mantella's Advanced Actions switched off, the trade kinds can no longer be triggered by keyword: Trade needs the kind, amount or item as a parameter. Only the gift menu still opens without them.
 - The rule that gold and goods change hands only in the barter menu now names the trade actions too, and says that an offer that came to nothing never undoes something that already happened.
 - SettleCrime and ReportWitnessedCrime show refusals on screen too, and follow the Action notifications switch.
+- Quest scan: the full scan of quests no longer runs at every talk start. It runs after a save is loaded (a few seconds later; the saved values are written at once), after sleeping or waiting, and once a game day. Quest changes are picked up by the plugin and read in batches, at most once a minute. A scan that becomes due during a talk or a fight waits until it ends, and a request made while a scan runs is no longer dropped. Talk starts are faster.
+- Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
 
 ### Fixed
 - Whether a hood or helmet covers your face is now known before a talk starts, so the NPC's greeting already fits whether they recognise you.
