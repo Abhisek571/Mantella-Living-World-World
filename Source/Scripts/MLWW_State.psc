@@ -353,11 +353,20 @@ bool Function Occupied()
 	Return talk && talk.IsRunning()
 EndFunction
 
+; No scan of this save yet (a new game, the first load after install): one is asked for and runs from the scheduler, never
+; inside the caller (a talk's NPC_Added handler would wait out the whole scan). Until then the getters give their
+; defaults, and callers that would say something wrong from them check Ready first.
 Function EnsureFresh()
 	If !cached && !busy
 		DueFull("asked", 0.0)
-		Pump(true)
+		Schedule()
 	EndIf
+EndFunction
+
+; True once this save has had its first full scan: fame, Thane holds and the war side are real values.
+bool Function Ready()
+	EnsureFresh()
+	Return cached
 EndFunction
 
 ; ---------------------------------------------------------------------------

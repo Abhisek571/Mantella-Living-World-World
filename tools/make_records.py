@@ -52,8 +52,8 @@ write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n 
       '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n')
 write('esp/spriggit-meta.json', json.dumps({'PackageName': 'Spriggit.Yaml.Skyrim', 'Version': '0.40.0', 'Release': 'SkyrimSE', 'ModKey': E}, indent=2))
 
-SETTLE_NOTE = "Needs Mantella Living World - World. Guards only. Pay and bribe ask you Yes/No first. Bribe and persuade need Advanced Actions on in Mantella. Keep Mantella's own AbsolveCrime off."
-REPORT_NOTE = "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards only. A guard adds a bounty only when another NPC (not one of your followers) is present as a witness, once per crime per talk and at most the vanilla bounty per crime per hold each day. This is a separate action from Mantella's own ReportCrime, which you can keep off."
+SETTLE_NOTE = "Needs Mantella Living World - World. Guards, stewards and Jarls only. Every way of settling asks you Yes/No first (letting a bounty go hands over any stolen goods). Bribe and persuade need Advanced Actions on in Mantella. Keep Mantella's own AbsolveCrime off."
+REPORT_NOTE = "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards, stewards and Jarls only. A guard adds a bounty only when another NPC (not one of your followers) is present as a witness, once per crime per talk and at most the vanilla bounty per crime per hold each day. This is a separate action from Mantella's own ReportCrime, which you can keep off."
 TRADE_NOTE = ("Needs Mantella Living World - World and Advanced Actions on in Mantella (it names the amount or the item). "
               "Followers, friends and lovers give and take freely; a stranger hands over gold or goods only as payment for what "
               "you handed them in the same talk. Anything you hand over asks you Yes/No first.")
@@ -61,7 +61,7 @@ AMOUNT = {'type': 'integer', 'minimum': 1, 'maximum': 100000}
 ITEM = {'type': 'string', 'description': 'Item name, for the item kinds.'}
 COUNT = {'type': 'integer', 'minimum': 1, 'maximum': 1000, 'description': 'How many; default 1.'}
 ACTIONS = [
-    {'identifier': 'mantella_mlww_settle_crime', 'name': 'SettleCrime', 'note': SETTLE_NOTE, 'lw_gate': 'guard',
+    {'identifier': 'mantella_mlww_settle_crime', 'name': 'SettleCrime', 'note': SETTLE_NOTE, 'lw_gate': 'authority',
      'description': "Settle the player's non-violent bounty in your hold: pay it, take a bribe, or let it go when persuaded.",
      'parameters': {'method': {'type': 'string', 'enum': ['pay', 'bribe', 'persuade'],
                                'description': 'pay: the player pays the bounty; bribe: the player pays you extra to forget it; persuade: you let a minor bounty go.'}},
@@ -69,7 +69,7 @@ ACTIONS = [
      'one-on-one': True,
      'prompt': "If you are a guard, steward or Jarl and agree to settle the player's bounty (paid, bribed or persuaded), begin your response with '{key}:'"},
     # Not "ReportCrime": Mantella's Disabled Actions matches by name, and its own ReportCrime is disabled by default.
-    {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportWitnessedCrime', 'note': REPORT_NOTE, 'lw_gate': 'guard',
+    {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportWitnessedCrime', 'note': REPORT_NOTE, 'lw_gate': 'authority',
      'description': 'Add a bounty for a crime a witness in this conversation saw the player commit.',
      'parameters': {'crime': {'type': 'string', 'enum': ['trespassing', 'lockpicking', 'assault', 'murder'],
                               'description': 'The crime the witness saw.'}},

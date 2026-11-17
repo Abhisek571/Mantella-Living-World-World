@@ -489,7 +489,12 @@ namespace MLWW::Listener
 				if (speaker && speaker.get() == actor) {
 					text = ReadInfoText(info, actor);
 					read = true;
-					KeepMenuLine(actor, info, topics, text);
+					try {
+						KeepMenuLine(actor, info, topics, text);
+					} catch (const std::exception& e) {  // menu_dialogue.json with a wrong-typed field (other characters' lines)
+						logger::error("menu dialogue of other characters dropped after an error: {}", e.what());
+						g_menuOthers = nlohmann::json::object();
+					}
 				}
 			}
 

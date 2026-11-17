@@ -345,8 +345,24 @@ Event OnWoken(string asEvent, string asText, float afHour, Form akSender)
 EndEvent
 
 Event OnGift(string asName, string asItem, float afCount, Form akSender)
+	If TradeHandOver(akSender, asItem)
+		Return
+	EndIf
 	RecordGift(akSender, asItem, afCount as int, true)
 EndEvent
+
+; An item the player handed over through the Trade action (MLWW_Trade.AskItem marks it just before): a sale or a payment,
+; told to the talk by Trade itself, never scored or remembered as a gift. The mark is used once and lasts 10 seconds.
+bool Function TradeHandOver(Form akSender, string asItem)
+	If !akSender || StorageUtil.GetStringValue(akSender, "MLWW_TradeHanded", "") != asItem
+		Return false
+	EndIf
+	float at = StorageUtil.GetFloatValue(akSender, "MLWW_TradeHandedAt", -100.0)
+	float now = Utility.GetCurrentRealTime()
+	StorageUtil.UnsetStringValue(akSender, "MLWW_TradeHanded")
+	StorageUtil.UnsetFloatValue(akSender, "MLWW_TradeHandedAt")
+	Return now >= at && now - at < 10.0
+EndFunction
 
 ; Given through the gift menu: remembered the same, no score event (M.A.R.A.S scores its own gifts).
 Event OnGiftMenu(string asName, string asItem, float afCount, Form akSender)

@@ -177,7 +177,12 @@ namespace MLWW::Personal
 				SKSE::GetTaskInterface()->AddTask([]() {
 					CheckCrime();
 					CheckParty();
-					Battle::Tick();
+					try {
+						Battle::Tick();
+					} catch (const std::exception& e) {  // battles.json with a wrong-typed field: the accounts are dropped
+						logger::error("battle accounts dropped after an error: {}", e.what());
+						Battle::Reset(true);
+					}
 				});
 				PollCrime();  // re-armed from the worker thread, never from inside the task
 			});

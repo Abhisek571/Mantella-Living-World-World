@@ -26,7 +26,8 @@ Event OnNpcAdded(Form akActor)
 		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Meetings,OnNpcAdded_start,\n", true, false)
 	EndIf
 	Actor npc = akActor as Actor
-	If !npc || npc == PlayerRef || npc.IsDead()
+	; before the first scan the values read 0: a snapshot stored now would later read as "became Thane"
+	If !npc || npc == PlayerRef || npc.IsDead() || !World.Ready()
 		Return
 	EndIf
 	; Someone who does not know who the player is (hood, shadows) has no "since we last met"; the snapshot waits.

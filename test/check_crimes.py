@@ -225,5 +225,30 @@ if os.path.isdir(os.path.join(HUB, 'living_world')):
 else:
     print('WARN the Hub is not checked out next to World: adapters not run')
 
+# Settle: the free paths (Thane/fame waiver, persuade) take stolen goods like a payment, so the player is asked first
+# when the action asks (abAsk); a bribe promises "You keep any stolen goods".
+CRIME = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Crime.psc'), encoding='utf-8').read()
+m = re.search(r'(?m)^string Function Settle\(.*?^EndFunction', CRIME, re.S)
+settle = m.group(0) if m else ''
+takes = [i.start() for i in re.finditer(r'ClearTakingGoods\(crime', settle)]
+check('Settle: two free paths take stolen goods', len(takes) == 2, takes)
+for at in takes:
+    before = settle[max(0, settle.rfind('If nonViolent <= WAIVE_MAX', 0, at), settle.rfind('If asMethod == "persuade"', 0, at)):at]
+    check('Settle: a free path asks before taking stolen goods', 'PlayerAgrees(' in before and 'stolen goods' in before and 'abAsk' in before, before[-200:])
+
+# tools/make_records.py writes the plugin and these action files: regenerating must give the shipped action files back
+# (a hand edit to the output alone is undone by the next run, as the guard-only gate once nearly was).
+import subprocess
+gen = tempfile.mkdtemp()
+try:
+    subprocess.run([sys.executable, '-B', os.path.join(ROOT, 'tools', 'make_records.py')], cwd=gen, check=True, capture_output=True)
+    actions = os.path.join('SKSE', 'Plugins', 'MantellaSoftware', 'data', 'actions')
+    for fn in sorted(os.listdir(os.path.join(gen, actions))):
+        made = open(os.path.join(gen, actions, fn), encoding='utf-8').read()  # text mode reads either line end the same
+        shipped = open(os.path.join(ROOT, actions, fn), encoding='utf-8').read()  # text mode reads either line end the same
+        check(f'make_records.py regenerates {fn} as shipped', made == shipped)
+finally:
+    shutil.rmtree(gen, ignore_errors=True)
+
 print(f'{fails} failed')
 sys.exit(1 if fails else 0)

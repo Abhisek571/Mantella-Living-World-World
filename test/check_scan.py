@@ -505,12 +505,27 @@ def scenario_pending():
     check('the model sees the old cost: every talk start scanned all quests', old.count('full') >= 2, old.log)
 
 
+def scenario_not_ready():
+    """A talk before this save's first scan: the getters never run the scan inside the caller (an NPC_Added handler waited
+    the whole scan), and the hood and "since we last met" lines are skipped instead of built from zero values."""
+    src = lambda n: open(os.path.join(ROOT, 'Source', 'Scripts', n), encoding='utf-8').read()
+    state = src('MLWW_State.psc')
+    fresh = re.search(r'(?m)^Function EnsureFresh\(\).*?^EndFunction', state, re.S)
+    check('EnsureFresh only asks for a scan (no forced Pump in the caller)', fresh is not None and 'Pump(' not in fresh.group(0)
+          and 'Schedule()' in fresh.group(0))
+    check('State.Ready says whether the first scan is done', re.search(r'bool Function Ready\(\)\s*EnsureFresh\(\)\s*Return cached', state) is not None)
+    check('Recognition gives no hood line before the first scan', '!World.Ready()' in src('MLWW_Recognition.psc'))
+    meet = re.search(r'(?m)^Event OnNpcAdded\(.*?^EndEvent', src('MLWW_Meetings.psc'), re.S)
+    check('Meetings stores no snapshot before the first scan', meet is not None
+          and 0 <= meet.group(0).find('!World.Ready()') < meet.group(0).find('Changes('))
+
 scenario_load()
 scenario_batching()
 scenario_timer()
 scenario_talk_and_fight()
 scenario_triggers()
 scenario_pending()
+scenario_not_ready()
 
 print(f'{"FAILED" if fails else "OK"}: {fails} failure(s)')
 sys.exit(1 if fails else 0)

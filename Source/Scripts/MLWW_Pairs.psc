@@ -157,9 +157,14 @@ string Function Line(Actor akA, Actor akB, int aiLevel)
 	Return both + " are strangers to each other."
 EndFunction
 
-; The player's household: close in Relationships (spouse), an adopted child or the house steward.
+; The player's household: the player's spouse, an adopted child or the house steward. Married by the game
+; (PlayerMarriedFaction) or through M.A.R.A.S as Relationships writes it (MRB_Close and the npc file's "maras" 3, or 4 in
+; a marriage crisis). Relationships also marks the engaged, dating and lovers close: they are not the household.
 bool Function Household(Actor akActor)
-	If StorageUtil.GetIntValue(akActor, "MRB_Close") > 0
+	Faction married = Game.GetFormFromFile(0x0C6472, "Skyrim.esm") as Faction  ; PlayerMarriedFaction
+	If married && akActor.IsInFaction(married)
+		Return true
+	ElseIf StorageUtil.GetIntValue(akActor, "MRB_Close") > 0 && JsonUtil.GetIntValue("MantellaLivingWorld/npc/" + MLWW_Util.BaseId(akActor) + ".json", "maras", 0) >= 3
 		Return true
 	EndIf
 	Faction adopted = Game.GetFormFromFile(0x0042B0, "HearthFires.esm") as Faction  ; BYOHRelationshipAdoptionFaction

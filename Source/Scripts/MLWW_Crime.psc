@@ -104,7 +104,12 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 		rest = " The " + violent + " gold for violent crimes stands."
 	EndIf
 	string waiveKey = KEY_WAIVE + HoldKey(hold, crime)
-	If nonViolent <= WAIVE_MAX && (World.IsThane(hold) || World.Fame(hold) >= FAME_WAIVE) && StorageUtil.GetIntValue(None, waiveKey, -1) != MLWW_Util.Today()
+	; the free paths take any stolen goods too, so they ask first; a No to the waiver goes on with the method asked for
+	; (a bribe keeps the goods)
+	If nonViolent <= WAIVE_MAX && (World.IsThane(hold) || World.Fame(hold) >= FAME_WAIVE) && StorageUtil.GetIntValue(None, waiveKey, -1) != MLWW_Util.Today() 			&& (!abAsk || PlayerAgrees(who + " will waive your " + nonViolent + " gold bounty in " + where + ", but any stolen goods you carry are handed over. Accept?", "Accept"))
+		If abAsk && crime.GetCrimeGoldNonViolent() <= 0
+			Return Tell(player + "'s bounty in " + where + " was already settled.")
+		EndIf
 		StorageUtil.SetIntValue(None, waiveKey, MLWW_Util.Today())
 		ClearTakingGoods(crime, nonViolent, violent)
 		string reason = "out of respect for a Thane of " + where
@@ -123,6 +128,12 @@ string Function Settle(Actor akSpeaker, string asMethod, bool abAsk = false)
 			Return Tell(player + " already had a bounty let go in " + where + " today; " + who + " will not do it again.")
 		ElseIf PlayerRef.GetActorValue("Speechcraft") < nonViolent
 			Return Tell(player + " could not talk " + who + " round; the " + nonViolent + " gold bounty in " + where + " stands.")
+		EndIf
+		If abAsk && !PlayerAgrees(who + " will let your " + nonViolent + " gold bounty in " + where + " go, but any stolen goods you carry are handed over. Accept?", "Accept")
+			Return Tell(player + " chose not to hand over stolen goods to " + who + "; the " + nonViolent + " gold bounty in " + where + " stands.")
+		EndIf
+		If abAsk && crime.GetCrimeGoldNonViolent() <= 0
+			Return Tell(player + "'s bounty in " + where + " was already settled.")
 		EndIf
 		StorageUtil.SetIntValue(None, waiveKey, MLWW_Util.Today())
 		ClearTakingGoods(crime, nonViolent, violent)

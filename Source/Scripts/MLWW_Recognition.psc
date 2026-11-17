@@ -86,7 +86,8 @@ string Function Verdict(Actor akNpc)
 		Return ""
 	EndIf
 	int hold = World.CurrentHold()
-	If hold < 0 || World.Fame(hold) >= FAME_KNOWN || World.IsThane(hold)
+	; before the first scan fame and Thane read 0: no hood line rather than a wrong one
+	If hold < 0 || !World.Ready() || World.Fame(hold) >= FAME_KNOWN || World.IsThane(hold)
 		Return ""
 	EndIf
 	If seesThrough

@@ -510,5 +510,19 @@ check('script: offer_trade for a ware that is not there is refused with a told-b
       and 'has nothing called " + Named(asItem) + " for sale")' in offer
       and offer.find('has nothing called') < offer.find('GetItemCount(item)'), offer[:300])
 
+# Values: an item the player hands over is credited at the barter sell price (base value / PriceFactor), a stranger's
+# goods cost the barter buy price (MenuPrice); and the hand-over is marked so MLWW_Personal.OnGift does not score it as a
+# gift (an ask_item / give_item loop once raised the gift score for free).
+ask_item = block('Function', 'AskItem')
+check('script: AskItem credits the barter sell price, not the base value',
+      'AddCredit(akNpc, Math.Floor(item.GetGoldValue() * count / PriceFactor()))' in ask_item and 'AddCredit(akNpc, item.GetGoldValue() * count)' not in ask_item)
+check('script: GiveItem charges a stranger the barter menu price', 'int value = MenuPrice(item) * count' in block('Function', 'GiveItem'))
+mark = ask_item.find('"MLWW_TradeHanded"')
+check('script: AskItem marks the hand-over before it moves', 0 <= mark < ask_item.find('PlayerRef.RemoveItem(item, count, true, akNpc)'))
+personal = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Personal.psc'), encoding='utf-8').read()
+on_gift = re.search(r'(?m)^Event OnGift\(.*?^EndEvent', personal, re.S)
+check('script: OnGift skips a Trade hand-over', on_gift is not None and on_gift.group(0).find('TradeHandOver(') >= 0
+      and on_gift.group(0).find('TradeHandOver(') < on_gift.group(0).find('RecordGift('))
+
 print(f'{fails} failed')
 sys.exit(1 if fails else 0)

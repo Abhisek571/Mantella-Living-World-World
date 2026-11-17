@@ -14,6 +14,8 @@
 
 #include "Writer.h"
 
+#include <map>
+
 namespace MLWW::Writer
 {
 	namespace
@@ -37,6 +39,10 @@ namespace MLWW::Writer
 
 		// Worker-thread only.
 		std::deque<nlohmann::json> g_lines;
+		std::map<std::filesystem::path, std::uint64_t> g_writeGen;  // the newest write of each file
+
+		constexpr int  kRenameTries = 100;
+		constexpr auto kRenameRetry = std::chrono::milliseconds(100);
 
 		void LoadExisting()
 		{
@@ -62,13 +68,41 @@ namespace MLWW::Writer
 			}
 		}
 
+		std::filesystem::path TempOf(const std::filesystem::path& a_file)
+		{
+			auto tmp = a_file;
+			tmp += L".tmp";
+			return tmp;
+		}
+
+		// The temp file of write a_gen replaces a_file once no reader holds it open. A newer write of the same file
+		// (which reuses the temp file) ends these retries; after kRenameTries the temp file stays and is logged.
+		void RetryRename(std::filesystem::path a_file, std::uint64_t a_gen, int a_tries)
+		{
+			RunLater(kRenameRetry, [file = std::move(a_file), a_gen, a_tries]() {
+				if (g_writeGen[file] != a_gen) {
+					return;
+				}
+				std::error_code ec;
+				std::filesystem::rename(TempOf(file), file, ec);
+				if (!ec) {
+					return;
+				}
+				if (a_tries + 1 < kRenameTries) {
+					RetryRename(file, a_gen, a_tries + 1);
+				} else {
+					logger::warn("rename to {} kept failing ({}); the new data stays in the .tmp file", file.string(), ec.message());
+				}
+			});
+		}
+
 		void WriteText(const std::filesystem::path& a_file, const std::string& text)
 		{
+			const auto gen = ++g_writeGen[a_file];
 			std::error_code ec;
 			std::filesystem::create_directories(a_file.parent_path(), ec);
 
-			auto tmp = a_file;
-			tmp += L".tmp";
+			const auto tmp = TempOf(a_file);
 			{
 				std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
 				if (!out) {
@@ -82,21 +116,11 @@ namespace MLWW::Writer
 				}
 			}
 			// std::filesystem::rename replaces an existing target on Windows, but not while a reader has it open (the
-			// Mantella side reading it): wait that out briefly, so a reader never sees a half-written file.
+			// Mantella side reading it). Never a direct, truncating write (a reader could see half a file): the rename is
+			// tried again later from the job queue, so the worker's other timed jobs never wait behind it.
 			std::filesystem::rename(tmp, a_file, ec);
-			for (int tries = 0; ec && tries < 25; ++tries) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(20));
-				ec.clear();
-				std::filesystem::rename(tmp, a_file, ec);
-			}
 			if (ec) {
-				// Fallback: direct write, so the data still lands even if rename is refused.
-				logger::warn("rename to {} failed ({}), writing directly", a_file.string(), ec.message());
-				std::ofstream out(a_file, std::ios::binary | std::ios::trunc);
-				if (out) {
-					out.write(text.data(), static_cast<std::streamsize>(text.size()));
-				}
-				std::filesystem::remove(tmp, ec);
+				RetryRename(a_file, gen, 0);
 			}
 		}
 

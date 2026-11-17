@@ -23,6 +23,14 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
 
 ### Fixed
+- The Thane or fame waiver and persuading a guard ask before they hand over stolen goods; saying no to the waiver goes on with the bribe or payment asked for.
+- Items handed to an NPC by talk are credited at what a merchant would pay, a stranger's goods cost the barter menu price, and an item handed over as payment no longer counts as a gift.
+- Before the first world scan of a save, no hood line and no "since we last met" snapshot are made from empty values, and a talk no longer waits for that scan.
+- Only the player's spouse, adopted children and steward are described as living together as family; dating partners, lovers and the engaged are not.
+- make_records.py writes the guard, steward and Jarl gate and notes of the crime actions, so running it no longer brings back the guard-only gate.
+- The plugin never rewrites a file in place when a reader holds it open; it retries the safe replace later instead, without holding up its other timed work.
+- A wrong-typed field in battles.json or menu_dialogue.json no longer crashes the game.
+- Fight accounts are not rewritten at the main menu or on loading screens, and the player name in battles.json is never "someone".
 - Settle a bounty and take a crime report are offered to Jarls and stewards too, as the actions always said. Needs the Integration Hub update.
 - Trade refuses a negative amount, count or price, or one larger than can be traded at once, with a line in the talk. Before, a negative count became one item and a huge count became everything the NPC carried.
 - The crime list waits for the other writer in steps the game keeps reliably, so two crimes logged at once both stay in the list.

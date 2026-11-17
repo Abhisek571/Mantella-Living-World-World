@@ -111,6 +111,7 @@ namespace MLWW::Battle
 		Fight                      g_fight;
 		std::deque<nlohmann::json> g_ended;  // newest first
 		bool                       g_prune = false;
+		bool                       g_gameLoaded = false;  // a game was loaded or started this session (Reset)
 		RE::FormID                 g_onID = 0;
 		RE::FormID                 g_bystandersID = 0;
 		RE::FormID                 g_hoursID = 0;
@@ -160,10 +161,12 @@ namespace MLWW::Battle
 			return name && *name ? name : "someone";
 		}
 
+		// "" (never "someone") when there is no name yet: the Hub reads this file's player as the current character.
 		std::string PlayerName()
 		{
-			auto* player = Player();
-			return player ? NameOf(player) : std::string{};
+			auto*       player = Player();
+			const char* name = player ? player->GetDisplayFullName() : nullptr;
+			return name ? name : "";
 		}
 
 		float Health(RE::Actor* a_actor) { return a_actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth); }
@@ -994,8 +997,11 @@ namespace MLWW::Battle
 	void Tick()
 	{
 		auto* player = Player();
-		if (!player) {
-			return;
+		if (!player || !g_gameLoaded) {
+			return;  // the main menu at start-up: no clock and no player name of a loaded game yet
+		}
+		if (auto* ui = RE::UI::GetSingleton(); ui && ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME)) {
+			return;  // the loaded game's clock is not there yet
 		}
 		if (!On()) {
 			if (g_fight.active || !g_ended.empty()) {
@@ -1072,5 +1078,6 @@ namespace MLWW::Battle
 			g_ended.clear();
 		}
 		g_prune = true;
+		g_gameLoaded = true;
 	}
 }

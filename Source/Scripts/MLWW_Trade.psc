@@ -265,7 +265,8 @@ string Function GiveItem(Actor akNpc, string asItem, int aiCount)
 	EndIf
 	int have = akNpc.GetItemCount(item)
 	int count = Count(aiCount, have)
-	int value = item.GetGoldValue() * count
+	; a stranger's goods cost what the barter menu would charge for them, not their bare base value
+	int value = MenuPrice(item) * count
 	If !Free(akNpc)
 		int credit = Credit(akNpc)
 		If value > credit
@@ -323,11 +324,15 @@ string Function AskItem(Actor akNpc, string asItem, int aiCount, bool abAsk = fa
 		Return Fail("You no longer have the " + item.GetName(), player + " no longer has " + Named(item.GetName()))
 	EndIf
 	int had = akNpc.GetItemCount(item)
+	; a sale or a payment, not a gift: World's plugin reports the hand-over, and MLWW_Personal.OnGift skips it by this mark
+	StorageUtil.SetStringValue(akNpc, "MLWW_TradeHanded", item.GetName())
+	StorageUtil.SetFloatValue(akNpc, "MLWW_TradeHandedAt", Utility.GetCurrentRealTime())
 	PlayerRef.RemoveItem(item, count, true, akNpc)
 	If akNpc.GetItemCount(item) - had < count
 		Return Fail("Nothing handed over: the " + item.GetName() + " did not arrive", Pieces(item, count) + " did not reach " + who)
 	EndIf
-	AddCredit(akNpc, item.GetGoldValue() * count)
+	; credited at what a merchant would pay for it (the barter sell price), not its full base value
+	AddCredit(akNpc, Math.Floor(item.GetGoldValue() * count / PriceFactor()))
 	WriteCarry(akNpc)
 	Return Done("You gave " + who + " " + Pieces(item, count), player + " handed " + who + " " + Pieces(item, count) + Short(count, aiCount, have) + Instead(chose, count, asked, Pieces(item, asked)) + "; it was handed over")
 EndFunction

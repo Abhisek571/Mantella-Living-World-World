@@ -745,5 +745,29 @@ check("Listener: the file it writes is the one the Hub reads",
 check('Listener: the menu is read on the main thread (in the task), never in the sink',
       'KeepMenuLine' not in re.search(r'ProcessEvent\(const RE::TESTopicInfoEvent\*.*?\n\t\t\t}\n', LISTENER, re.S).group(0))
 
+# Pairs: only the player's spouse (game or M.A.R.A.S married), adopted children and the steward are the household that
+# "lives together as family"; Relationships' MRB_Close alone also covers the engaged, dating and lovers.
+PAIRS = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Pairs.psc'), encoding='utf-8').read()
+house = re.search(r'(?m)^bool Function Household\(.*?^EndFunction', PAIRS, re.S)
+house = house.group(0) if house else ''
+check('Pairs: the household is the spouse, not anyone Relationships marks close',
+      '0x0C6472' in house and '"maras", 0) >= 3' in house
+      and re.search(r'If StorageUtil\.GetIntValue\(akActor, "MRB_Close"\) > 0\s*Return true', house) is None, house[:300])
+
+# Plugin files and tasks: a refused rename never falls back to a truncating direct write and never sleeps on the worker;
+# a wrong-typed field in battles.json or menu_dialogue.json never escapes a main-thread task; ended fights are not
+# rewritten at the main menu or during a loading screen, and the root player is never "someone".
+WRITER = open(os.path.join(ROOT, 'plugin', 'src', 'Writer.cpp'), encoding='utf-8').read()
+write_text = re.search(r'void WriteText\(.*?\n\t\t}\n', WRITER, re.S)
+write_text = write_text.group(0) if write_text else ''
+check('Writer: a refused rename is retried later, never written in place', 'RetryRename(' in write_text
+      and 'std::ofstream out(a_file' not in write_text and 'sleep_for' not in WRITER)
+tick = re.search(r'\tvoid Tick\(\)\n\t\{.*?\n\t\}\n', BATTLE, re.S)
+tick = tick.group(0) if tick else ''
+check('Battle: Tick waits for a loaded game and skips loading screens', '!g_gameLoaded' in tick and 'LoadingMenu::MENU_NAME' in tick
+      and 'g_gameLoaded = true' in BATTLE)
+check('Battle: the root player name is never "someone"', re.search(r'std::string PlayerName\(\)\n\t\t\{[^}]*NameOf', BATTLE) is None)
+check('Personal: Battle::Tick runs inside try/catch', re.search(r'try \{\s*Battle::Tick\(\);\s*\} catch', PERSONAL) is not None)
+check('Listener: KeepMenuLine runs inside try/catch', re.search(r'try \{\s*KeepMenuLine\(', LISTENER) is not None)
 print(f'{fails} failed, {warns} warnings')
 sys.exit(1 if fails else 0)
