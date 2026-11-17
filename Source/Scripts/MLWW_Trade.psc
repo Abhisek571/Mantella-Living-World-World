@@ -628,8 +628,11 @@ EndFunction
 ; count the rest: with only the dearest five (stock), Lucan denied having the Oakflesh tome his chest held (live test 9).
 ; Cleared for anyone who is not a merchant. Returns the dearest MAX_STOCK with their barter prices (stock, as Best would),
 ; from the same pass: each item's count is asked once (each count waits for the game's frame).
+; wares_complete is 1 only when the pass reached the chest's last entry: a bigger chest stops at MAX_SCAN, and the Hub
+; then calls the list a sample, never the whole stock.
 string Function WriteWares(string asPath, ObjectReference akChest)
 	JsonUtil.StringListClear(asPath, "wares")
+	JsonUtil.SetIntValue(asPath, "wares_complete", 0)
 	If !akChest
 		Return ""
 	EndIf
@@ -673,6 +676,7 @@ string Function WriteWares(string asPath, ObjectReference akChest)
 		EndIf
 		i += 1
 	EndWhile
+	JsonUtil.SetIntValue(asPath, "wares_complete", (!forms || i >= forms.Length) as int)
 	string out = ""
 	i = 0
 	While i < MAX_STOCK && best[i]

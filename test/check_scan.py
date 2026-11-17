@@ -72,7 +72,46 @@ occ = body('Function', 'Occupied')
 check('Occupied = fighting or a Mantella talk running', 'PlayerRef.IsInCombat()' in occ and 'talk.IsRunning()' in occ)
 pump = body('Function', 'Pump')
 check('a request while a refresh runs is kept and run after it (A07)',
-      re.search(r'If busy\s+again = true\s+Return', pump) is not None and re.search(r'While again\s+again = false\s+Step', pump) is not None)
+      re.search(r'If busy\s+again = true\s+Return', pump) is not None and re.search(r'While again(?: && gen == pumpGen)?\s+again = false\s+Step', pump) is not None)
+# B06: Papyrus keeps running calls in the save. A save made during a Pump resumed that loop after loading, while
+# Register cleared busy and started a second one; the first to finish cleared busy under the other. Register now
+# counts a generation and a loop from before it stops without touching busy.
+check('Register starts a new Pump generation before it clears busy', re.search(r'pumpGen \+= 1\s+busy = false', reg) is not None, reg[:200])
+check('a Pump loop stops when the generation changed, and only its own generation clears busy and schedules',
+      'int gen = pumpGen' in pump and 'While again && gen == pumpGen' in pump
+      and re.search(r'If gen == pumpGen\s+busy = false\s+Schedule\(\)\s+EndIf', pump) is not None, pump)
+
+
+def port_pump_after_load(fixed=True):
+    """A save made during a Pump: the restored loop goes on after Register's own loop started. Returns the most loops
+    running at once and whether busy ended cleared."""
+    state = {'busy': True, 'gen': 0, 'running': 1, 'most': 1, 'again': False}  # the restored loop, mid-step
+    restored_gen = state['gen']
+    # Register on load
+    if fixed:
+        state['gen'] += 1
+    state['busy'] = False
+    # Register's own Pump begins (its step yields; the restored loop resumes in between)
+    state['busy'] = True
+    state['running'] += 1
+    state['most'] = max(state['most'], state['running'])
+    own_gen = state['gen']
+    # the restored loop finishes its step
+    state['running'] -= 1
+    if not fixed or restored_gen == state['gen']:
+        state['busy'] = False  # cleared while Register's loop still runs
+    busy_while_own_runs = state['busy']
+    # Register's loop finishes
+    state['running'] -= 1
+    if not fixed or own_gen == state['gen']:
+        state['busy'] = False
+    return busy_while_own_runs, state['busy']
+
+
+check('Pump model: after such a load, busy stays set while the new loop runs, and is cleared when it ends',
+      port_pump_after_load(True) == (True, False))
+check('Pump model: without the generation, the restored loop cleared busy under the new one (the old fault)',
+      port_pump_after_load(False) == (False, False))
 full = body('Function', 'FullScan')
 check('a full scan re-arms the shared day timer', 'RegisterForSingleUpdateGameTime(24.0)' in full and 'lastFullDay = Utility.GetCurrentGameTime()' in full)
 

@@ -56,6 +56,7 @@ int batches = 0
 ; Scheduling (reset on every load: real time restarts at 0 on every launch).
 bool busy = false
 bool again = false
+int pumpGen = 0  ; Register adds one: a Pump loop the save kept running from before the load stops
 bool cheapDue = false
 float cheapAt = 0.0
 bool fullDue = false
@@ -71,6 +72,7 @@ int watchCount = 0
 
 Function Register()
 	Setup()
+	pumpGen += 1
 	busy = false
 	again = false
 	dungeonBusy = false
@@ -270,6 +272,9 @@ EndFunction
 
 ; Runs whatever is due, one refresh at a time. A call while one runs sets again, and the running call goes round once
 ; more before it lets go, so no request is lost (it used to be dropped).
+; Papyrus keeps running calls in the save: a save made during a Pump resumes that loop after loading, while Register
+; clears busy and starts its own. The old loop sees pumpGen change and stops after its current step without touching
+; busy, so only one loop runs.
 Function Pump(bool abForce = false)
 	If busy
 		again = true
@@ -277,12 +282,15 @@ Function Pump(bool abForce = false)
 	EndIf
 	busy = true
 	again = true
-	While again
+	int gen = pumpGen
+	While again && gen == pumpGen
 		again = false
 		Step(abForce)
 	EndWhile
-	busy = false
-	Schedule()
+	If gen == pumpGen
+		busy = false
+		Schedule()
+	EndIf
 EndFunction
 
 Function Step(bool abForce)

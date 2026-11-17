@@ -743,8 +743,9 @@ namespace MLWW::Battle
 		nlohmann::json ToJson(double a_end)
 		{
 			const bool bystanders = WithBystanders();
+			// "player": whose game the fight is from, so Prune drops it after another character's save is loaded
 			nlohmann::json fight{ { "id", std::to_string(g_fight.id) }, { "active", g_fight.active ? 1 : 0 }, { "start", g_fight.start },
-				{ "end", a_end }, { "seconds", static_cast<int>(g_fight.seconds + 0.5f) }, { "place", g_fight.place } };
+				{ "end", a_end }, { "seconds", static_cast<int>(g_fight.seconds + 0.5f) }, { "place", g_fight.place }, { "player", PlayerName() } };
 			auto fighters = nlohmann::json::array();
 			for (const auto& f : g_fight.fighters) {
 				const bool bystander = IsBystander(f);

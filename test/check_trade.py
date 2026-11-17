@@ -360,6 +360,25 @@ kinds = set(re.findall(r'Return "([a-z ]+)"', block('Function', 'WareKind')))
 hub_kinds = set(re.findall(r"'([a-z ]+)': \('", hub_trade))
 check(f'every kind World writes is one the Hub names ({len(kinds)})', kinds and kinds <= hub_kinds, kinds - hub_kinds)
 check('the Hub reads the wares list', "npc.get('wares')" in hub_trade)
+# B04: a chest of more than MAX_SCAN entries was cut off without a word, and the Hub called the list the whole stock.
+# wares_complete is 0 until the pass reaches the chest's last entry; the Hub needs it for the whole-stock wording.
+check('wares: wares_complete is reset first and set to 1 only when the pass read the chest to its end',
+      write_wares.index('JsonUtil.SetIntValue(asPath, "wares_complete", 0)') < write_wares.index('If !akChest')
+      and 'JsonUtil.SetIntValue(asPath, "wares_complete", (!forms || i >= forms.Length) as int)' in write_wares
+      and write_wares.index('"wares_complete", (!forms') > write_wares.index('EndWhile'))
+check("the Hub calls the list the whole stock only with wares_complete", "_int(npc.get('wares_complete')) == 1" in hub_trade)
+
+
+def port_complete(entries, max_scan=150):
+    """WriteWares' loop end on plain values: True when the chest was read to its end."""
+    i = 0
+    while entries and i < len(entries) and i < max_scan:
+        i += 1
+    return not entries or i >= len(entries)
+
+
+check('wares rule: 150 entries read whole, 151 not, an empty chest is complete',
+      port_complete(list(range(150))) and not port_complete(list(range(151))) and port_complete([]))
 rules = open(os.path.join(ROOT, 'SKSE', 'Plugins', 'MantellaSoftware', 'data', 'prompt_rules', '20_world.txt'), encoding='utf-8').read()
 check('the World rule no longer says gold moves only in the barter menu', 'trade actions' in rules and 'Nothing happened' in rules)
 records = open(os.path.join(ROOT, 'tools', 'make_records.py'), encoding='utf-8').read()

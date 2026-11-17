@@ -546,6 +546,28 @@ check('Battle: harmful magic is recorded only when FromCast says it was cast (he
       '(harmful && !FromCast(target.get(), caster.get(), effect))' in magic_task
       and magic_task.find('FromCast') < magic_task.find('AddOnce(ft->harm[kind]'), magic_task[:200])
 
+# B03: only fights read back from battles.json had a "player" tag; a fight recorded this session had none, passed
+# Prune's default (the current player) and went on into another character's game loaded without a restart. ToJson
+# now writes the player with every fight.
+to_json = re.search(r'nlohmann::json ToJson\(double a_end\).*?\n\t\t}\n', BATTLE, re.S)
+to_json = to_json.group(0) if to_json else ''
+prune_fn = re.search(r'void Prune\(\).*?\n\t\t}\n', BATTLE, re.S)
+prune_fn = prune_fn.group(0) if prune_fn else ''
+check('Battle: every fight ToJson writes carries the player whose game it is from', '{ "player", PlayerName() }' in to_json, to_json[:300])
+check('Battle: Prune drops fights of another player (an untagged fight counts as this player\'s)',
+      'a_fight.value("player", player) != player' in prune_fn, prune_fn[:300])
+
+
+def port_prune(fights, player, today):
+    """Battle.cpp Prune on plain values."""
+    return [f for f in fights if not (f.get('end', 0.0) > today + 0.001 or f.get('player', player) != player)]
+
+
+ended = {'id': '1', 'end': 3.0, 'player': 'Player'}  # as End() now stores it (ToJson)
+check('Battle rule: a fight of this session is dropped when another character is loaded', port_prune([ended], 'Jenassa', 4.0) == [])
+check('Battle rule: and kept for the same character', port_prune([ended], 'Player', 4.0) == [ended])
+check('Battle rule: a fight from after the loaded save is dropped', port_prune([ended], 'Player', 2.0) == [])
+
 
 def port_is_cast(spell_type, casting_type, source):
     """Battle.cpp IsCast on plain values."""

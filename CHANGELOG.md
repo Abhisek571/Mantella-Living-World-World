@@ -23,6 +23,9 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
 
 ### Fixed
+- Fight accounts no longer carry over to another character loaded without restarting the game.
+- Merchants: World now says whether it read the whole chest (it stops after 150 entries), so the Hub never calls a cut-off list the whole stock.
+- After loading a save made while world.json was being refreshed, only one refresh runs (two could run at once).
 - Whether a hood or helmet covers your face is now known before a talk starts, so the NPC's greeting already fits whether they recognise you.
 - Fights: damage and kills count as yours only when you really attacked: a weapon or fist blow, or a spell you cast. An aura or cloak you carry no longer puts you down for damage and the kill in fights you never joined; such a kill is recorded with no killer.
 - Ordinary dialogue: your topic is kept with a mod's own lines also when the game no longer holds your choice (most of a dialogue mod's lines had none).
