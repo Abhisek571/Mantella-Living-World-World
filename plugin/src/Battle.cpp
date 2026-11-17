@@ -610,7 +610,7 @@ namespace MLWW::Battle
 		}
 
 		// Whether the player cast something carrying this effect within kCastWindow. Live test 9: drain and slow put down
-		// to the player on Nyri and the wolf with no cast seen; the effect had no active effect left to check (an instant
+		// to the player on a follower and the wolf with no cast seen; the effect had no active effect left to check (an instant
 		// one, or one whose conditions kept it off), which FromCast counts as a cast. A match keeps the cast fresh, so a
 		// concentration spell held longer than the window still counts.
 		bool PlayerCast(const RE::EffectSetting* a_effect, Clock::time_point a_now)

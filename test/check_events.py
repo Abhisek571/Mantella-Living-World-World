@@ -563,7 +563,7 @@ for name, args, want in (("the player's Slow spell from his hand", ('spell', 'fi
                          ('a weapon enchantment on a hit', ('enchantment', 'fire_and_forget', 'right'), False)):
     check(f'Battle rule: {name} -> {"recorded" if want else "not his cast"}', port_is_cast(*args) == want)
 
-# Live test 9: with the new DLL, battles.json still put drain and slow from the player on Nyri and the wolf. FromCast
+# Live test 9: with the new DLL, battles.json still put drain and slow from the player on Jenassa and the wolf. FromCast
 # counts an effect with no active effect left (an instant one, or one its conditions kept off) as a cast, so a perk or
 # passive on the player still got through. The player's harmful magic now needs a cast of a spell carrying that effect
 # (TESSpellCastEvent from the player) within a few seconds.
@@ -671,15 +671,15 @@ def port_fight(events):
     return dealt, killers
 
 
-# test 10's first fight: Nyri strikes the wolf, the player's cloak spell touches it every second (no cast of his), the
+# test 10's first fight: Jenassa strikes the wolf, the player's cloak spell touches it every second (no cast of his), the
 # game names the player as the killer
 cloak = ('spell', {'cloak damage'})
-fight = [(0.0, 'hit', 'nyri', 'wolf', 'weapon', False), (0.1, 'loss', None, 'wolf', 8), (0.5, 'hit', 'player', 'wolf', cloak, False),
-         (1.0, 'hit', 'nyri', 'wolf', 'weapon', False), (1.1, 'loss', None, 'wolf', 8), (1.5, 'hit', 'player', 'wolf', cloak, False),
-         (2.0, 'hit', 'nyri', 'wolf', 'weapon', False), (2.1, 'loss', None, 'wolf', 7), (2.2, 'death', 'player', 'wolf')]
+fight = [(0.0, 'hit', 'jenassa', 'wolf', 'weapon', False), (0.1, 'loss', None, 'wolf', 8), (0.5, 'hit', 'player', 'wolf', cloak, False),
+         (1.0, 'hit', 'jenassa', 'wolf', 'weapon', False), (1.1, 'loss', None, 'wolf', 8), (1.5, 'hit', 'player', 'wolf', cloak, False),
+         (2.0, 'hit', 'jenassa', 'wolf', 'weapon', False), (2.1, 'loss', None, 'wolf', 7), (2.2, 'death', 'player', 'wolf')]
 dealt, killers = port_fight(fight)
 check('Battle rule: a cloak on the player gives him no damage; the follower who struck gets it (test 10: he got 23)',
-      dealt == {'nyri': 23}, dealt)
+      dealt == {'jenassa': 23}, dealt)
 check('Battle rule: the kill the game gives the player with no attack of his has no killer', killers == {'wolf': ''}, killers)
 dealt, killers = port_fight([(0.0, 'hit', 'player', 'wolf', 'weapon', False), (0.1, 'loss', None, 'wolf', 23), (0.2, 'death', 'player', 'wolf')])
 check("Battle rule: the player's own sword blow and kill stay his", dealt == {'player': 23} and killers == {'wolf': 'player'}, (dealt, killers))
