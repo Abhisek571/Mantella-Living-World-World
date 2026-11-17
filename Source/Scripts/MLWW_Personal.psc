@@ -58,6 +58,7 @@ Function Register()
 	RegisterForModEvent("MLWW_Defended", "OnDefended")
 	RegisterForModEvent("MLWW_TradeGoods", "OnTradeGoods")
 	factWritePending = false
+	crimeLogging = false  ; a save made inside AppendRow whose stack a script update dropped must not hold it for good
 	If StorageUtil.FormListCount(self, KEY_STALE) > 0
 		QueueFacts(None)
 	EndIf

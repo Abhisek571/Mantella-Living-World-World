@@ -246,7 +246,7 @@ namespace MLWW::Listener
 				if (root.contains("others") && root["others"].is_object()) {
 					g_menuOthers = root["others"];
 				}
-				// lines of another character never become this one's (live audit: a character switch relabelled them)
+				// lines of another character never become this one's (a live test: a character switch relabelled them)
 				const auto owner = root.value("player", std::string{});
 				if (!owner.empty() && owner != g_menuPlayer) {
 					g_menuOthers[owner] = root["npcs"];
@@ -494,6 +494,10 @@ namespace MLWW::Listener
 					} catch (const std::exception& e) {  // menu_dialogue.json with a wrong-typed field (other characters' lines)
 						logger::error("menu dialogue of other characters dropped after an error: {}", e.what());
 						g_menuOthers = nlohmann::json::object();
+						if (g_menuPlayer != PlayerName()) {  // thrown mid-switch: part-loaded lines are not the old character's
+							g_menu.clear();
+							g_menuPlayer = PlayerName();
+						}
 					}
 				}
 			}

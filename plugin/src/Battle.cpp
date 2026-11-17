@@ -907,7 +907,9 @@ namespace MLWW::Battle
 			const auto player = root.value("player", std::string{});
 			for (auto& fight : root["fights"]) {
 				if (fight.is_object() && fight.value("active", 0) == 0 && g_ended.size() < kMaxKept) {
-					fight["player"] = player;  // checked against the loaded game's player by Prune
+					if (!fight.contains("player") || !fight["player"].is_string()) {
+						fight["player"] = player;  // checked against the loaded game's player by Prune
+					}
 					g_ended.push_back(fight);
 				}
 			}

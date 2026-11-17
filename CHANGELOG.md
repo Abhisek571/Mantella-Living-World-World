@@ -23,6 +23,7 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
 
 ### Fixed
+- A save made while a crime row was being written no longer makes every later crime row wait 4 seconds. Kept dialogue menu lines of another character are never filed under this one after a damaged menu dialogue file, and each kept fight keeps the player it was fought by.
 - The Thane or fame waiver and persuading a guard ask before they hand over stolen goods; saying no to the waiver goes on with the bribe or payment asked for.
 - Items handed to an NPC by talk are credited at what a merchant would pay, a stranger's goods cost the barter menu price, and an item handed over as payment no longer counts as a gift.
 - Before the first world scan of a save, no hood line and no "since we last met" snapshot are made from empty values, and a talk no longer waits for that scan.
