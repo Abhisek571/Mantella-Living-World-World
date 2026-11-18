@@ -146,6 +146,7 @@ namespace MLWW::Listener
 		constexpr std::size_t kMenuNpcs = 200;
 		constexpr std::size_t kMenuSaidChars = 300;
 		constexpr std::size_t kMenuLineChars = 500;
+		constexpr auto        kMenuSaveDelay = 2s;  // lines captured within this time are written together
 		const std::filesystem::path kMenuFile{ L"Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/menu_dialogue.json" };
 
 		struct MenuLine
@@ -165,6 +166,13 @@ namespace MLWW::Listener
 			int                   dropped{ 0 };  // lines that had to go because the store was full
 		};
 		std::map<std::string, MenuNpc> g_menu;  // by base id, the current character's lines; main thread only
+		// The current character's lines from another time of the game (a later save's, while an earlier one is loaded):
+		// kept in the file under "later" (the Hub reads only "npcs"), back in g_menu when a save of that time is loaded.
+		std::map<std::string, MenuNpc> g_menuLater;
+		double                         g_loadDay = -1.0;  // game day of the loaded save when it was loaded (-1: a new game)
+		double                         g_loadReal = 0.0;  // real time (unix seconds) the current save was loaded
+		bool                           g_menuDirty = false;   // lines changed since the file was last written
+		bool                           g_menuQueued = false;  // a coalesced save is on its way
 		bool                           g_menuLoaded = false;
 		std::string                    g_menuPlayer;  // the character g_menu belongs to
 		nlohmann::json                 g_menuOthers = nlohmann::json::object();  // other characters' lines: name -> npcs, kept as read
@@ -248,9 +256,38 @@ namespace MLWW::Listener
 				}
 				// lines of another character never become this one's (a live test: a character switch relabelled them)
 				const auto owner = root.value("player", std::string{});
+				auto       later = root.contains("later") && root["later"].is_object() ? root["later"] : nlohmann::json::object();
 				if (!owner.empty() && owner != g_menuPlayer) {
+					for (auto& [base, npc] : later.items()) {  // that character's later lines go with the rest of theirs
+						if (!npc.is_object() || !npc.contains("lines") || !npc["lines"].is_array()) {
+							continue;
+						}
+						auto& into = root["npcs"][base];
+						if (!into.is_object() || !into.contains("lines") || !into["lines"].is_array()) {
+							into = npc;
+							continue;
+						}
+						for (auto& l : npc["lines"]) {
+							into["lines"].push_back(l);
+						}
+					}
+					later = nlohmann::json::object();
 					g_menuOthers[owner] = root["npcs"];
 					root["npcs"] = g_menuOthers.contains(g_menuPlayer) ? g_menuOthers[g_menuPlayer] : nlohmann::json::object();
+				}
+				for (auto& [base, npc] : later.items()) {
+					if (!npc.is_object() || !npc.contains("lines") || !npc["lines"].is_array()) {
+						continue;
+					}
+					auto& kept = g_menuLater[base];
+					kept.name = npc.value("name", std::string{});
+					kept.dropped = npc.value("dropped", 0);
+					for (auto& l : npc["lines"]) {
+						if (l.is_object() && kept.lines.size() < kMenuPerNpc) {
+							kept.lines.push_back({ l.value("said", std::string{}), l.value("line", std::string{}), l.value("time", 0.0),
+								l.value("day", 0.0), l.value("plugin", std::string{}), l.value("place", std::string{}), l.value("vanilla", 0) != 0 });
+						}
+					}
 				}
 				g_menuOthers.erase(g_menuPlayer);
 				ReadMenuAck();  // on game load: the file is read once here, then again only when it changes
@@ -273,6 +310,7 @@ namespace MLWW::Listener
 				}
 			} catch (...) {
 				g_menu.clear();
+				g_menuLater.clear();
 			}
 		}
 
@@ -356,6 +394,15 @@ namespace MLWW::Listener
 			if (now == g_menuPlayer) {
 				return;
 			}
+			for (auto& [base, npc] : g_menuLater) {  // the later lines go with the rest of that character's
+				auto& into = g_menu[base];
+				if (into.name.empty()) {
+					into.name = npc.name;
+				}
+				into.lines.insert(into.lines.end(), npc.lines.begin(), npc.lines.end());
+				std::ranges::stable_sort(into.lines, {}, &MenuLine::time);
+			}
+			g_menuLater.clear();
 			if (!g_menuPlayer.empty() && !g_menu.empty()) {
 				g_menuOthers[g_menuPlayer] = MenuJson(g_menu);
 			}
@@ -380,17 +427,77 @@ namespace MLWW::Listener
 			g_menuPlayer = now;
 		}
 
-		void SaveMenu()
+		// Whether a line belongs to the time of the loaded save. A line heard since that save was loaded is (unless the
+		// clock went back); one heard before only when the save's own time had reached it then. A line of a later save
+		// is never shown to an earlier one, however far that is played on in this session.
+		bool InThisTime(const MenuLine& a_line, double a_today)
 		{
+			const double upto = a_line.time >= g_loadReal ? a_today : g_loadDay;
+			return a_line.day <= upto + 0.01;
+		}
+
+		// The newest real capture time among a character's kept lines (kept as read under "others"): when it was last played.
+		double LastSeen(const nlohmann::json& a_npcs)
+		{
+			double newest = 0.0;
+			if (!a_npcs.is_object()) {
+				return newest;
+			}
+			for (const auto& npc : a_npcs) {
+				if (!npc.is_object() || !npc.contains("lines") || !npc["lines"].is_array()) {
+					continue;
+				}
+				for (const auto& l : npc["lines"]) {
+					if (l.is_object() && l.contains("time") && l["time"].is_number()) {
+						newest = std::max(newest, l["time"].get<double>());
+					}
+				}
+			}
+			return newest;
+		}
+
+		// Builds the file from the store now and hands it to the worker thread. Main thread only.
+		void SaveMenuNow()
+		{
+			g_menuDirty = false;
 			const double today = GameDay();
 			ReadMenuAck();
+			// every line of an NPC in one place, then split by the time of the loaded save
+			for (auto& [base, npc] : g_menuLater) {
+				auto& into = g_menu[base];
+				if (into.name.empty()) {
+					into.name = npc.name;
+				}
+				into.lines.insert(into.lines.end(), npc.lines.begin(), npc.lines.end());
+				std::ranges::stable_sort(into.lines, {}, &MenuLine::time);
+				while (into.lines.size() > kMenuPerNpc) {  // the oldest go, as in the later store
+					into.lines.pop_front();
+					into.dropped += 1;
+				}
+			}
+			g_menuLater.clear();
 			for (auto it = g_menu.begin(); it != g_menu.end();) {
 				auto&        lines = it->second.lines;
 				const double acked = AckedDay(g_menuPlayer, it->first);
-				// from a later time of another save (an earlier one was loaded): never this game's; and a line already
-				// stored as a memory (menu_ack.json). Age alone never removes a line.
-				std::erase_if(lines, [&](const MenuLine& l) { return l.day > today + 0.01 || (acked >= 0.0 && l.time > 0.0 && l.time <= acked); });
+				// a line already stored as a memory (menu_ack.json) goes. Age alone never removes a line.
+				std::erase_if(lines, [&](const MenuLine& l) { return acked >= 0.0 && l.time > 0.0 && l.time <= acked; });
+				// from a later time of the game (an earlier save was loaded): kept aside, never this game's lines
+				for (auto l = lines.begin(); l != lines.end();) {
+					if (InThisTime(*l, today)) {
+						++l;
+						continue;
+					}
+					auto& later = g_menuLater[it->first];
+					later.name = it->second.name;
+					later.lines.push_back(std::move(*l));
+					l = lines.erase(l);
+				}
 				it = lines.empty() ? g_menu.erase(it) : std::next(it);
+			}
+			for (auto& [base, npc] : g_menuLater) {
+				while (npc.lines.size() > kMenuPerNpc) {
+					npc.lines.pop_front();
+				}
 			}
 			PruneOthers();
 			while (g_menu.size() > kMenuNpcs) {  // the NPC talked with longest ago goes first
@@ -398,14 +505,93 @@ namespace MLWW::Listener
 				logger::warn("menu dialogue store full ({} NPCs): {} lines of {} dropped", kMenuNpcs, oldest->second.lines.size(), oldest->second.name);
 				g_menu.erase(oldest);
 			}
-			while (g_menuOthers.size() > kMenuOthers) {
-				g_menuOthers.erase(g_menuOthers.begin());
+			while (g_menuLater.size() > kMenuNpcs) {
+				g_menuLater.erase(std::ranges::min_element(g_menuLater, {}, [](const auto& a_npc) { return a_npc.second.lines.back().time; }));
+			}
+			while (g_menuOthers.size() > kMenuOthers) {  // the character played longest ago goes first
+				auto   oldest = g_menuOthers.begin();
+				double oldestSeen = LastSeen(oldest.value());
+				for (auto it = std::next(g_menuOthers.begin()); it != g_menuOthers.end(); ++it) {
+					if (const double seen = LastSeen(it.value()); seen < oldestSeen) {
+						oldest = it;
+						oldestSeen = seen;
+					}
+				}
+				g_menuOthers.erase(oldest);
 			}
 			// a copy goes to the worker thread, which builds and writes the file: no JSON work on the main thread
-			Writer::RunLater(std::chrono::milliseconds(0), [menu = g_menu, player = g_menuPlayer, others = g_menuOthers]() {
-				nlohmann::json root{ { "player", player }, { "npcs", MenuJson(menu) }, { "others", others } };
+			Writer::RunLater(std::chrono::milliseconds(0), [menu = g_menu, later = g_menuLater, player = g_menuPlayer, others = g_menuOthers]() {
+				nlohmann::json root{ { "player", player }, { "npcs", MenuJson(menu) }, { "later", MenuJson(later) }, { "others", others } };
 				Writer::Save(kMenuFile, root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 			});
+		}
+
+		// SaveMenuNow from a task or a message: a wrong-typed field in other characters' kept lines must not escape.
+		void SaveMenuSafe()
+		{
+			try {
+				SaveMenuNow();
+			} catch (const std::exception& e) {
+				logger::error("menu dialogue of other characters dropped after an error: {}", e.what());
+				g_menuOthers = nlohmann::json::object();
+				try {
+					SaveMenuNow();  // this character's lines are still written
+				} catch (...) {
+				}
+			}
+		}
+
+		// Writes the store a little later, once for all the lines of an exchange (each line would copy the whole store).
+		void SaveMenu()
+		{
+			g_menuDirty = true;
+			if (g_menuQueued) {
+				return;
+			}
+			g_menuQueued = true;
+			Writer::RunLater(kMenuSaveDelay, []() {
+				SKSE::GetTaskInterface()->AddTask([]() {
+					g_menuQueued = false;
+					if (g_menuDirty) {
+						SaveMenuSafe();
+					}
+				});
+			});
+		}
+
+		// The entry the player chose, only while the menu still lists it (the pointer can outlive its entry by the time a
+		// line starts): found by address in the current list or the stacked ones before it is read; otherwise null.
+		const RE::MenuTopicManager::Dialogue* ListedChoice(RE::MenuTopicManager* a_topics)
+		{
+			const auto* chosen = a_topics->lastSelectedDialogue;
+			if (!chosen) {
+				return nullptr;
+			}
+			constexpr int kMaxEntries = 4096;  // a damaged list never loops for good
+			int  seen = 0;
+			auto listed = [&](RE::BSSimpleList<RE::MenuTopicManager::Dialogue*>* a_list) {  // not const: the const iterator does not build
+				if (!a_list) {
+					return false;
+				}
+				for (const auto* entry : *a_list) {
+					if (entry == chosen) {
+						return true;
+					}
+					if (++seen > kMaxEntries) {
+						return false;
+					}
+				}
+				return false;
+			};
+			if (listed(a_topics->dialogueList)) {
+				return chosen;
+			}
+			for (auto* node = a_topics->dialogueListStack; node && seen <= kMaxEntries; node = node->next, ++seen) {
+				if (listed(node->item)) {
+					return chosen;
+				}
+			}
+			return nullptr;
 		}
 
 		// a_actor spoke a_info in the dialogue menu with the player.
@@ -416,7 +602,7 @@ namespace MLWW::Listener
 			}
 			SwitchMenuPlayer();
 			std::string said;
-			if (const auto* chosen = a_topics->lastSelectedDialogue; chosen && chosen->parentTopic && chosen->parentTopic == a_info->parentTopic) {
+			if (const auto* chosen = ListedChoice(a_topics); chosen && chosen->parentTopic && chosen->parentTopic == a_info->parentTopic) {
 				said = Trim(chosen->topicText.c_str());
 			}
 			// Live test 15: the chosen entry is often gone by the time this runs (8 of 11 lines of a dialogue mod had no
@@ -496,6 +682,7 @@ namespace MLWW::Listener
 						g_menuOthers = nlohmann::json::object();
 						if (g_menuPlayer != PlayerName()) {  // thrown mid-switch: part-loaded lines are not the old character's
 							g_menu.clear();
+							g_menuLater.clear();
 							g_menuPlayer = PlayerName();
 						}
 					}
@@ -558,6 +745,40 @@ namespace MLWW::Listener
 				return RE::BSEventNotifyControl::kContinue;
 			}
 		};
+	}
+
+	void FlushMenu()
+	{
+		if (g_menuDirty) {
+			SaveMenuSafe();
+		}
+	}
+
+	void GameLoaded(bool a_newGame)
+	{
+		g_loadDay = a_newGame ? -1.0 : GameDay();
+		g_loadReal = UnixNow();
+		// Split the stored lines by the loaded save's time now (written about 2 s later), not at the next captured line:
+		// the Hub reads "npcs" at once, so a later save's lines must leave it, and this save's must come back.
+		std::error_code ec;
+		if (a_newGame || !std::filesystem::exists(kMenuFile, ec)) {
+			return;  // a new game: no character name yet, and every stored line is from before it (kept aside at the next save)
+		}
+		try {
+			if (!g_menuLoaded) {
+				LoadMenu();
+			}
+			SwitchMenuPlayer();
+			SaveMenu();
+		} catch (const std::exception& e) {  // menu_dialogue.json with a wrong-typed field (other characters' lines)
+			logger::error("menu dialogue of other characters dropped after an error: {}", e.what());
+			g_menuOthers = nlohmann::json::object();
+			if (g_menuPlayer != PlayerName()) {  // thrown mid-switch: part-loaded lines are not the old character's
+				g_menu.clear();
+				g_menuLater.clear();
+				g_menuPlayer = PlayerName();
+			}
+		}
 	}
 
 	void Register()

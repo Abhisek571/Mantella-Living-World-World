@@ -112,6 +112,9 @@ namespace MLWW::Battle
 		std::deque<nlohmann::json> g_ended;  // newest first
 		bool                       g_prune = false;
 		bool                       g_gameLoaded = false;  // a game was loaded or started this session (Reset)
+		// A fight just ended while the player is still flagged in combat: the flag alone does not start the next one
+		// (it can stick with no foe around); a blow, a kill, a hostile combatant or leaving combat does.
+		bool                       g_waitNew = false;
 		RE::FormID                 g_onID = 0;
 		RE::FormID                 g_bystandersID = 0;
 		RE::FormID                 g_hoursID = 0;
@@ -259,6 +262,7 @@ namespace MLWW::Battle
 			auto* player = Player();
 			g_fight = {};
 			g_fight.active = true;
+			g_waitNew = false;
 			g_live = true;
 			g_fight.id = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 			g_fight.start = Today();
@@ -847,6 +851,8 @@ namespace MLWW::Battle
 			// Hunting a deer or a quarrel nobody felt is no fight: an enemy must have been hostile, or the player's side hurt.
 			const bool enemy = std::ranges::any_of(g_fight.fighters, [](const Fighter& f) { return f.side == 1 && f.role != Role::kSummon; });
 			const bool real = std::ranges::any_of(g_fight.fighters, [](const Fighter& f) { return (f.side == 1 && f.hostile) || (f.side == 0 && f.taken > 0.0f); });
+			// the file changes only when the fight is kept, or when its live account was written while it went on
+			const bool written = (enemy && real) || g_fight.lastWrite != Clock::time_point{};
 			if (enemy && real) {
 				g_fight.active = false;
 				g_ended.push_front(ToJson(Today()));
@@ -857,7 +863,32 @@ namespace MLWW::Battle
 			}
 			g_fight = {};
 			g_live = false;
-			Write();
+			g_waitNew = true;
+			if (written) {
+				Write();
+			}
+		}
+
+		// An enemy in combat with the player's side and hostile to the player (a new foe while the combat flag stuck).
+		bool HostileCombatant()
+		{
+			auto* player = Player();
+			auto* lists = RE::ProcessLists::GetSingleton();
+			if (!player || !lists) {
+				return false;
+			}
+			bool found = false;
+			lists->ForEachHighActor([&](RE::Actor* a_actor) {
+				if (a_actor && a_actor->IsInCombat() && !a_actor->IsDead() && a_actor->IsHostileToActor(player)) {
+					auto target = a_actor->GetActorRuntimeData().currentCombatTarget.get();
+					if (target && PlayerSide(target.get())) {
+						found = true;
+						return RE::BSContainer::ForEachResult::kStop;
+					}
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+			return found;
 		}
 
 		// Enemies fighting the player's side that have not struck or been struck yet (an archer who keeps missing).
@@ -1018,8 +1049,12 @@ namespace MLWW::Battle
 			Prune();
 		}
 		const auto now = Clock::now();
-		if (!g_fight.active && player->IsInCombat()) {
-			Begin();
+		if (!g_fight.active) {
+			if (!player->IsInCombat()) {
+				g_waitNew = false;
+			} else if (!g_waitNew || HostileCombatant()) {
+				Begin();
+			}
 		}
 		if (g_fight.active) {
 			if (auto* ui = RE::UI::GetSingleton(); ui && !ui->GameIsPaused()) {
@@ -1076,6 +1111,7 @@ namespace MLWW::Battle
 		g_playerCasts.clear();
 		g_playerBlows.clear();
 		g_live = false;
+		g_waitNew = false;
 		if (a_forget) {
 			g_ended.clear();
 		}

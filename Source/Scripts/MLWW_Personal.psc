@@ -124,6 +124,10 @@ Event OnMurder(string asEvent, string asCrime, float afNum, Form akSender)
 EndEvent
 
 Event OnStruck(string asEvent, string asText, float afNum, Form akSender)
+	Faction brawl = Game.GetFormFromFile(0x04CFA6, "Skyrim.esm") as Faction  ; DGIntimidateFaction: a bar brawl is no assault
+	If brawl && akSender as Actor && (akSender as Actor).IsInFaction(brawl)
+		Return
+	EndIf
 	If akSender
 		StorageUtil.SetFloatValue(akSender, KEY_STRUCK, Utility.GetCurrentGameTime())
 		If MLWW_Util.IsThalmor(akSender as Actor)

@@ -103,6 +103,7 @@ Function Register()
 		JsonUtil.SetPathIntValue(WORLD_FILE, ".loading", 1)
 	EndIf
 	DueCheap(0.0)
+	fullDue = false  ; a due time kept from before the load is not this load's: the full scan waits SETTLE seconds
 	DueFull("load", Utility.GetCurrentRealTime() + SETTLE)
 	Pump()
 EndFunction

@@ -18,4 +18,11 @@ namespace MLWW::Listener
 {
 	// Registers the TESTopicInfoEvent sink. Call at kDataLoaded.
 	void Register();
+
+	// Writes kept menu dialogue now when a coalesced save is still pending. Main thread (a game save or load).
+	void FlushMenu();
+
+	// A save was loaded or a new game started: lines from a later time of the game are kept aside, not shown. After a
+	// load the stored lines are split by the loaded save's time and written about 2 s later.
+	void GameLoaded(bool a_newGame);
 }

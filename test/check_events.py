@@ -732,8 +732,10 @@ check("Listener: a mod's own line whose chosen entry is gone takes its topic's o
       'if (said.empty() && !FromBaseGame(a_info) && a_info->parentTopic)' in keep and 'a_info->parentTopic->GetFullName()' in keep
       and keep.find('a_info->parentTopic->GetFullName()') < keep.find('FromBaseGame(a_info) && (said.empty()'), keep[:200])
 check('Listener: nothing expires (kept until the Hub made a memory of it); bounded at 60 per NPC and 200 NPCs; lines from a later '
-      'time of another save dropped; when full a base game line goes first, then the oldest, counted as dropped',
-      all(k in LISTENER for k in ('kMenuPerNpc = 60', 'kMenuNpcs = 200', 'l.day > today + 0.01', 'npc.dropped += 1',
+      'time of another save kept aside under "later" (never in "npcs", which the Hub reads); when full a base game line goes '
+      'first, then the oldest, counted as dropped',
+      all(k in LISTENER for k in ('kMenuPerNpc = 60', 'kMenuNpcs = 200', 'if (InThisTime(*l, today))', '{ "later", MenuJson(later) }',
+                                  'a_line.time >= g_loadReal ? a_today : g_loadDay', 'npc.dropped += 1',
                                   'std::ranges::find_if(npc.lines, [](const MenuLine& l) { return l.vanilla; })'))
       and 'kMenuDays' not in LISTENER)
 check('Listener: each line keeps its plugin, place and game time (with the hour)',
@@ -769,5 +771,78 @@ check('Battle: Tick waits for a loaded game and skips loading screens', '!g_game
 check('Battle: the root player name is never "someone"', re.search(r'std::string PlayerName\(\)\n\t\t\{[^}]*NameOf', BATTLE) is None)
 check('Personal: Battle::Tick runs inside try/catch', re.search(r'try \{\s*Battle::Tick\(\);\s*\} catch', PERSONAL) is not None)
 check('Listener: KeepMenuLine runs inside try/catch', re.search(r'try \{\s*KeepMenuLine\(', LISTENER) is not None)
+
+# Menu dialogue store: one coalesced save per exchange, copied on the main thread when it runs, flushed on game save and
+# before a load; the other character played longest ago goes first, not the alphabetically first.
+save_menu = re.search(r'\t\tvoid SaveMenu\(\)\n\t\t\{.*?\n\t\t}\n', LISTENER, re.S)
+save_menu = save_menu.group(0) if save_menu else ''
+check('Listener: a captured line only marks the store dirty; one save runs later in a main-thread task',
+      'g_menuDirty = true' in save_menu and 'Writer::RunLater(kMenuSaveDelay' in save_menu and 'AddTask(' in save_menu
+      and 'menu = g_menu' not in save_menu, save_menu[:300])
+MAIN = open(os.path.join(ROOT, 'plugin', 'src', 'main.cpp'), encoding='utf-8').read()
+check('Listener: pending menu lines are written on a game save and before a load',
+      re.search(r'kSaveGame \|\| a_msg->type == SKSE::MessagingInterface::kPreLoadGame\) \{\s*MLWW::Listener::FlushMenu\(\)', MAIN) is not None
+      and 'MLWW::Listener::GameLoaded(' in MAIN)
+check('Listener: the deferred save runs only through the guarded call (no exception leaves its task)',
+      len(re.findall(r'\bSaveMenuNow\(\);', LISTENER)) == 2 and len(re.findall(r'try \{\s*SaveMenuNow\(\);', LISTENER)) == 2)
+check('Listener: the other character played longest ago goes first', 'LastSeen(' in LISTENER
+      and 'g_menuOthers.erase(g_menuOthers.begin())' not in LISTENER)
+
+# Battle: a fight that was not kept and never written leaves battles.json alone; a sticking combat flag does not start
+# the next fight on its own.
+end = re.search(r'\t\tvoid End\(\)\n\t\t\{.*?\n\t\t}\n', BATTLE, re.S)
+end = end.group(0) if end else ''
+check('Battle: End writes only a kept fight, or one whose live account is in the file',
+      re.search(r'if \(written\) \{\s*Write\(\);', end) is not None and 'g_fight.lastWrite != Clock::time_point{}' in end
+      and 'g_waitNew = true' in end, end[-400:])
+begin = re.search(r'\t\tvoid Begin\(\)\n\t\t\{.*?\n\t\t}\n', BATTLE, re.S)
+check('Battle: after a fight ends, the combat flag alone starts no new one (a blow, a hostile combatant or leaving combat does)',
+      '} else if (!g_waitNew || HostileCombatant()) {' in tick and begin is not None and 'g_waitNew = false' in begin.group(0))
+
+# Papyrus: a load never keeps a full-scan time from before it; the initiative scan does nothing with nobody to bring over.
+STATE = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_State.psc'), encoding='utf-8').read()
+check('State: Register clears the full-scan due flag before the load scan is due',
+      re.search(r'fullDue = false[^\n]*\n\s*DueFull\("load"', STATE) is not None)
+INITIATIVE = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Initiative.psc'), encoding='utf-8').read()
+scan = re.search(r'(?m)^Actor Function Scan\(\).*?^EndFunction', INITIATIVE, re.S)
+scan = scan.group(0) if scan else ''
+check('Initiative: Scan returns before Calm() when nobody wants to tell anything',
+      0 <= scan.find('If i == 0 ||') < scan.find('Calm(PlayerRef)'), scan[:300])
+forget = re.search(r'(?m)^Function Forget\(.*?^EndFunction', INITIATIVE, re.S)
+forget = forget.group(0) if forget else ''
+outdated = re.search(r'(?m)^bool Function Outdated\(.*?^EndFunction', INITIATIVE, re.S)
+outdated = outdated.group(0) if outdated else ''
+check('Initiative: a reason whose quest stopped or moved on is forgotten before the NPC is brought over (no keys: no check)',
+      '"MLWW_WantsToTellQuest"' in INITIATIVE and '"MLWW_WantsToTellStage"' in INITIATIVE
+      and 'If !q\n\t\tReturn false' in outdated and '!q.IsRunning() || q.GetStage() != StorageUtil.GetIntValue(akNpc, KEY_STAGE)' in outdated
+      and 'UnsetFormValue(akNpc, KEY_QUEST)' in forget and 'UnsetIntValue(akNpc, KEY_STAGE)' in forget
+      and 0 <= scan.find('ElseIf Outdated(npc)') < scan.find('npc.Is3DLoaded()'), outdated[:300])
+
+# Personal: a hit in a bar brawl (DGIntimidateFaction) is no assault.
+PERSONAL_PSC = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Personal.psc'), encoding='utf-8').read()
+struck = re.search(r'(?m)^Event OnStruck\(.*?^EndEvent', PERSONAL_PSC, re.S)
+struck = struck.group(0) if struck else ''
+check('Personal: a struck NPC in a brawl (DGIntimidateFaction) logs no assault',
+      'GetFormFromFile(0x04CFA6, "Skyrim.esm") as Faction' in struck
+      and 0 <= struck.find('IsInFaction(brawl)') < struck.find('LogCrime('), struck[:300])
+
+# Listener: the split by the loaded save's time runs soon after every load, not at the next line; merged lines are capped;
+# the chosen dialogue entry is read only when the menu still lists it.
+loaded = re.search(r'\tvoid GameLoaded\(bool a_newGame\)\n\t\{.*?\n\t}\n', LISTENER, re.S)
+loaded = loaded.group(0) if loaded else ''
+check('Listener: after a load the stored lines are loaded, switched to this character and saved (split) inside try/catch',
+      re.search(r'try \{\s*if \(!g_menuLoaded\) \{\s*LoadMenu\(\);\s*\}\s*SwitchMenuPlayer\(\);\s*SaveMenu\(\);\s*\} catch', loaded) is not None
+      and loaded.find('g_loadDay =') < loaded.find('SaveMenu();'), loaded[:400])
+save_now = re.search(r'\t\tvoid SaveMenuNow\(\)\n\t\t\{.*?\n\t\t}\n', LISTENER, re.S)
+save_now = save_now.group(0) if save_now else ''
+merge = save_now[:save_now.find('g_menuLater.clear();')] if 'g_menuLater.clear();' in save_now else ''
+check('Listener: lines merged back from the later store are capped at 60 per NPC, the oldest going first',
+      'while (into.lines.size() > kMenuPerNpc)' in merge and 'into.lines.pop_front();' in merge, merge[-300:])
+choice = re.search(r'ListedChoice\(RE::MenuTopicManager\* a_topics\)\n\t\t\{.*?\n\t\t}\n', LISTENER, re.S)
+choice = choice.group(0) if choice else ''
+check('Listener: the chosen menu entry is used only when found by address in the listed dialogue (never read before)',
+      'a_topics->dialogueList' in choice and 'a_topics->dialogueListStack' in choice and 'entry == chosen' in choice
+      and '->parentTopic' not in choice and 'ListedChoice(a_topics)' in LISTENER
+      and 'a_topics->lastSelectedDialogue; chosen &&' not in LISTENER, choice[:300])
 print(f'{fails} failed, {warns} warnings')
 sys.exit(1 if fails else 0)

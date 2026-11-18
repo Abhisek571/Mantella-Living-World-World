@@ -55,6 +55,12 @@ namespace
 			MLWW::Personal::ResetFight();
 			MLWW::Battle::Reset(a_msg->type == SKSE::MessagingInterface::kNewGame);
 		}
+		if (a_msg->type == SKSE::MessagingInterface::kSaveGame || a_msg->type == SKSE::MessagingInterface::kPreLoadGame) {
+			MLWW::Listener::FlushMenu();  // menu lines still waiting for their coalesced save
+		}
+		if (a_msg->type == SKSE::MessagingInterface::kPostLoadGame || a_msg->type == SKSE::MessagingInterface::kNewGame) {
+			MLWW::Listener::GameLoaded(a_msg->type == SKSE::MessagingInterface::kNewGame);
+		}
 		if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kNewGame) {
 			MLWW::Writer::Clear();  // lines heard in the game left behind are not nearby in the next one
 		}

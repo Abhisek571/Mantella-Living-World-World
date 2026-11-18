@@ -38,6 +38,15 @@ Every change to Mantella Living World - World. The Nexus page lists only the mai
 - Settle a bounty and take a crime report are offered to Jarls and stewards too, as the actions always said. Needs the Integration Hub update.
 - Trade refuses a negative amount, count or price, or one larger than can be traded at once, with a line in the talk. Before, a negative count became one item and a huge count became everything the NPC carried.
 - The crime list waits for the other writer in steps the game keeps reliably, so two crimes logged at once both stay in the list.
+- Kept dialogue menu lines are written once a couple of seconds after an exchange (and when you save or load), not once per line, so long conversations no longer cause small stutters.
+- Loading an earlier save no longer deletes the kept dialogue menu lines of a later one: right after the load they are set aside, never shown in the earlier save's talks, and they come back as soon as you load a save from that time again.
+- Hitting someone in a bar brawl is no longer remembered as an assault.
+- An NPC who wanted to tell you about a quest (for example from Missives) no longer walks up once that quest has moved on or ended.
+- The topic you picked in the dialogue menu is only read while the menu still lists it, which avoids a rare crash when the menu changes between choosing and the reply.
+- When more than 8 other characters have kept dialogue lines, the one you played longest ago goes first, not the first by name.
+- A combat flag that sticks with no enemy around no longer starts a new fight account every few seconds or rewrites the fight file over and over; a new hit or a hostile enemy starts the next fight.
+- After loading a save, the quest scan always waits a few seconds instead of sometimes running at once during the load.
+- NPCs who want to come over and tell you something are checked only when there is someone with something to tell.
 - Fight accounts no longer carry over to another character loaded without restarting the game.
 - Merchants: World now says whether it read the whole chest (it stops after 150 entries), so the Hub never calls a cut-off list the whole stock.
 - After loading a save made while world.json was being refreshed, only one refresh runs (two could run at once).
