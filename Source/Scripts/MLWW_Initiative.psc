@@ -11,6 +11,12 @@ GlobalVariable Property MLWW_InitiativeOn Auto
 
 string Property KEY_WANTS = "MLWW_WantsToTell" AutoReadOnly
 string Property KEY_WHY = "MLWW_WantsToTellWhy" AutoReadOnly
+; Public contract, set by the module that called WantToTell (Missives does): on the NPC, StorageUtil form value
+; "MLWW_WantsToTellQuest" (the Quest the reason is about) and int value "MLWW_WantsToTellStage" (that quest's stage when the
+; reason was given). Before the NPC is brought over, a reason whose quest stopped running or moved to another stage is
+; forgotten. Without them there is no check.
+string Property KEY_QUEST = "MLWW_WantsToTellQuest" AutoReadOnly
+string Property KEY_STAGE = "MLWW_WantsToTellStage" AutoReadOnly
 float Property RADIUS = 700.0 AutoReadOnly  ; about 10 m
 float Property COOLDOWN = 600.0 AutoReadOnly
 float Property SCAN = 30.0 AutoReadOnly
@@ -23,6 +29,8 @@ Actor approached  ; brought over for a reason that is forgotten once they speak
 
 Function Register()
 	busy = false
+	approached = None  ; a talk from before the load is over, even if its Ended never came
+	seeded = false
 	RegisterForModEvent("MantellaConversation_Ended", "OnConversationEnded")
 	RegisterForModEvent("MLWW_MantellaLine", "OnMantellaLine")
 	RegisterForModEvent("MLW_ReportRequest", "OnReportRequest")
@@ -45,8 +53,10 @@ EndEvent
 ; Why they came is for the opening line only; after the first spoken line it would repeat on every reply.
 Event OnMantellaLine(string asEventName, string asText, float afSeconds, Form akSpeaker)
 	If approached
-		Forget(approached)  ; the reason was told
-		approached = None
+		If akSpeaker == approached
+			Forget(approached)  ; the reason was told
+		EndIf
+		approached = None  ; someone else spoke: their talk is another one (its Ended was missed), the reason stays
 	EndIf
 	If seeded
 		seeded = false
@@ -77,6 +87,17 @@ EndFunction
 Function Forget(Actor akNpc)
 	StorageUtil.FormListRemove(None, KEY_WANTS, akNpc, true)
 	StorageUtil.UnsetStringValue(akNpc, KEY_WHY)
+	StorageUtil.UnsetFormValue(akNpc, KEY_QUEST)
+	StorageUtil.UnsetIntValue(akNpc, KEY_STAGE)
+EndFunction
+
+; The reason is about a quest that stopped running or moved past the stage it was given at (KEY_QUEST / KEY_STAGE).
+bool Function Outdated(Actor akNpc)
+	Quest q = StorageUtil.GetFormValue(akNpc, KEY_QUEST) as Quest
+	If !q
+		Return false
+	EndIf
+	Return !q.IsRunning() || q.GetStage() != StorageUtil.GetIntValue(akNpc, KEY_STAGE)
 EndFunction
 
 Event OnUpdate()
@@ -88,17 +109,19 @@ EndEvent
 
 ; Picks the nearest NPC with a reason and brings them over. Returns the NPC, or None (testing calls this directly).
 Actor Function Scan()
-	If !MLWW_InitiativeOn || MLWW_InitiativeOn.GetValueInt() != 1 || !Calm(PlayerRef)
+	int i = StorageUtil.FormListCount(None, KEY_WANTS)
+	If i == 0 || !MLWW_InitiativeOn || MLWW_InitiativeOn.GetValueInt() != 1 || !Calm(PlayerRef)
 		Return None
 	EndIf
 	Actor best = None
 	float bestDist = RADIUS
-	int i = StorageUtil.FormListCount(None, KEY_WANTS)
 	While i > 0
 		i -= 1
 		Actor npc = StorageUtil.FormListGet(None, KEY_WANTS, i) as Actor
 		If !npc || npc.IsDead()
 			StorageUtil.FormListRemoveAt(None, KEY_WANTS, i)
+		ElseIf Outdated(npc)
+			Forget(npc)  ; removes only index i (no duplicates): the indexes still to visit stay valid
 		ElseIf npc.Is3DLoaded() && Calm(npc) && !npc.IsHostileToActor(PlayerRef) && npc.GetCurrentScene() == None
 			float d = npc.GetDistance(PlayerRef)
 			If d <= bestDist

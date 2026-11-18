@@ -2,6 +2,67 @@
 
 Every change to Mantella Living World - World. The Nexus page lists only the main changes for each version.
 
+## 1.2.1 (2026-11-18)
+
+### New
+- Ordinary dialogue with an NPC (the topics you pick in the game's dialogue menu and their answers, from any mod) is kept from the moment the game loads, also before Mantella's first conversation, so that NPC's next talk knows it. Nothing expires: the lines wait (with the day, the place and the mod they come from) until that NPC's next talk turns them into memories, however much later. Up to 60 exchanges per NPC and 200 NPCs; when an NPC's store is full, a base game line goes first. Needs the Integration Hub.
+- Fights: every NPC who fought near you is told what really happened from their side (who fought, who died, how hurt each was, how much each did, close calls, rescues, magic and kills), during the fight and for 6 game hours after. A fight worth remembering is added to their memory. Drain or slow magic counts as yours only when you really cast a spell with that effect a few seconds before; an aura, ability, enchantment or perk you carry never does. Settings on the Hub MCM's World page: on/off, include bystanders, hours to keep.
+- Trading by talk: NPCs haggle in words, and the game acts only when something really changes hands. One action, Trade, with the kind inside: give_gold, ask_gold, give_item, ask_item, offer_trade and take_gift (opens the game's gift menu). Anything you hand over asks you Yes/No first (not for an NPC flagged Trades without asking on the Hub's NPCs page). Followers, friends, lovers and anyone under an absolute command give and take freely; a stranger hands over gold or goods only as payment for what you gave them in the same talk. Only what the NPC really carries can be given, never quest items. Every trade checks that the gold or goods really arrived before anything leaves the other side; if the goods do not arrive, your gold comes back.
+- Buying from merchants by talk: asking for one named item at a price ("sell me a torch for 5 gold") uses offer_trade, so you can haggle; "show me your wares" still opens the barter menu. A merchant is anyone in a shop faction with a merchant chest, wherever they stand: they sell from that chest, your gold goes into it, and the price is held to half to one and a half times the shop price. Anyone else is refused with a line. The barter menu keeps the game's own place and hours.
+- Custom answer in the trade confirm box: type how much gold to hand over ("2000", "2,000" or "2000 gold"), another count of the item asked for, gold instead of the item ("50 gold"), or the price you pay a merchant (never under half the shop price). What really moves is what the NPC is told, so offering more than asked is a real surprise. You can never give more than you carry. Needs UIExtensions (a Mantella requirement); without it the box stays Yes / Not now.
+- When you talk about buying, selling, gold or gifts, the NPCs here are told what they carry (gold and a few notable things). A merchant is told a few wares of each kind across prices (spell tomes and potions, not only soul gems and rings), how many more there are of each kind, and that the list is not complete, so he offers to check instead of saying he has none.
+- Every action result goes back into the talk as an in-game event ("(Nothing happened: you have only 30 gold.)"), so the NPC knows whether it worked, and shows a short line on screen (switch: Action notifications, Hub MCM). A barter menu closed during a talk with that merchant is told to the talk.
+- Killing or attacking a Thalmor: the people close by remember seeing it for 3 days, and a guard's crime report names the victim as Thalmor. Outside the big walled cities, and with no Thalmor or Legion soldier in the talk, they are told folk here do not much care. Bounties are not changed.
+- Murders and attacks by you on ordinary people (not your party), and deaths of named people you did not kill, are kept for the Hub's world news: what happened, the day, the place with its town and hold, the victim and who was close by. One attack per person per day; a murder that day replaces it. Children are never listed as victims, and a child nearby is listed without a name.
+
+### Changed
+- With Mantella's Advanced Actions switched off, the trade kinds can no longer be triggered by keyword: Trade needs the kind, amount or item as a parameter. Only the gift menu still opens without them.
+- The rule that gold and goods change hands only in the barter menu now names the trade actions too, and says that an offer that came to nothing never undoes something that already happened.
+- SettleCrime and ReportWitnessedCrime show refusals on screen too, and follow the Action notifications switch.
+- Quest scan: the full scan of quests no longer runs at every talk start. It runs after a save is loaded (a few seconds later; the saved values are written at once), after sleeping or waiting, and once a game day. Quest changes are picked up by the plugin and read in batches, at most once a minute. A scan that becomes due during a talk or a fight waits until it ends, and a request made while a scan runs is no longer dropped. Talk starts are faster.
+- Trade action: a merchant sells a ware you ask for by name with offer_trade, at the shop price unless you agreed another, instead of opening the barter menu. The trade rule says a merchant also sells the shop's wares, not only what he carries.
+
+### Fixed
+- Saves made after the quest scan ran could not be loaded (the game crashed while reading the save): two script strings of over 5 KB (the quest progress JSON) were kept in the save. The quest progress and the outcome events now live in PapyrusUtil's storage. Saves already made with them stay unloadable; make a new save after updating.
+- A wig or hair piece in the hair slot no longer counts as a hood: only a piece made to be worn over the head (helmet or hood keywords) hides your face.
+- Trade and bounty boxes name the action: "Gold to <name>", "Item to <name>", "Purchase from <name>", "Bounty waived by", "Bribe to", "Bounty payment to", with amounts and prices.
+- A save made while a crime row was being written no longer makes every later crime row wait 4 seconds. Kept dialogue menu lines of another character are never filed under this one after a damaged menu dialogue file, and each kept fight keeps the player it was fought by.
+- The Thane or fame waiver and persuading a guard ask before they hand over stolen goods; saying no to the waiver goes on with the bribe or payment asked for.
+- Items handed to an NPC by talk are credited at what a merchant would pay, a stranger's goods cost the barter menu price, and an item handed over as payment no longer counts as a gift.
+- Before the first world scan of a save, no hood line and no "since we last met" snapshot are made from empty values, and a talk no longer waits for that scan.
+- Only the player's spouse, adopted children and steward are described as living together as family; dating partners, lovers and the engaged are not.
+- make_records.py writes the guard, steward and Jarl gate and notes of the crime actions, so running it no longer brings back the guard-only gate.
+- The plugin never rewrites a file in place when a reader holds it open; it retries the safe replace later instead, without holding up its other timed work.
+- A wrong-typed field in battles.json or menu_dialogue.json no longer crashes the game.
+- Fight accounts are not rewritten at the main menu or on loading screens, and the player name in battles.json is never "someone".
+- Settle a bounty and take a crime report are offered to Jarls and stewards too, as the actions always said. Needs the Integration Hub update.
+- Trade refuses a negative amount, count or price, or one larger than can be traded at once, with a line in the talk. Before, a negative count became one item and a huge count became everything the NPC carried.
+- The crime list waits for the other writer in steps the game keeps reliably, so two crimes logged at once both stay in the list.
+- Kept dialogue menu lines are written once a couple of seconds after an exchange (and when you save or load), not once per line, so long conversations no longer cause small stutters.
+- Loading an earlier save no longer deletes the kept dialogue menu lines of a later one: right after the load they are set aside, never shown in the earlier save's talks, and they come back as soon as you load a save from that time again.
+- Hitting someone in a bar brawl is no longer remembered as an assault.
+- An NPC who wanted to tell you about a quest (for example from Missives) no longer walks up once that quest has moved on or ended.
+- The topic you picked in the dialogue menu is only read while the menu still lists it, which avoids a rare crash when the menu changes between choosing and the reply.
+- When more than 8 other characters have kept dialogue lines, the one you played longest ago goes first, not the first by name.
+- A combat flag that sticks with no enemy around no longer starts a new fight account every few seconds or rewrites the fight file over and over; a new hit or a hostile enemy starts the next fight.
+- After loading a save, the quest scan always waits a few seconds instead of sometimes running at once during the load.
+- NPCs who want to come over and tell you something are checked only when there is someone with something to tell.
+- Fight accounts no longer carry over to another character loaded without restarting the game.
+- Merchants: World now says whether it read the whole chest (it stops after 150 entries), so the Hub never calls a cut-off list the whole stock.
+- After loading a save made while world.json was being refreshed, only one refresh runs (two could run at once).
+- Whether a hood or helmet covers your face is now known before a talk starts, so the NPC's greeting already fits whether they recognise you.
+- Fights: damage and kills count as yours only when you really attacked: a weapon or fist blow, or a spell you cast. An aura or cloak you carry no longer puts you down for damage and the kill in fights you never joined; such a kill is recorded with no killer.
+- Ordinary dialogue: your topic is kept with a mod's own lines also when the game no longer holds your choice (most of a dialogue mod's lines had none).
+- The hood line never names you to someone who does not recognise you: "the hooded stranger".
+- Ordinary dialogue kept for one character never reaches another: each character keeps their own lines (other characters' are kept apart), and lines no talk used within 60 game days are dropped.
+- Saving the kept ordinary dialogue no longer happens on the game's main thread, and the game's own files are not replaced while being read.
+- A trap or stray arrow hitting you no longer starts a "the fight just ended" banter; banter looks for the party only when it will speak.
+- An NPC who walked up to start a talk keeps their reason when that talk's end was missed and someone else spoke first.
+- Two generic NPCs of one kind no longer share what they carry.
+- A merchant joining a talk reads the shop chest once.
+- world.json is never left marked as loading for the whole session.
+- The separate trade actions of an earlier version are no longer listened for.
+
 ## 1.2.0 (2026-11-09)
 
 ### New

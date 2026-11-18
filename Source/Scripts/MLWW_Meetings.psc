@@ -22,18 +22,33 @@ Function Register()
 EndFunction
 
 Event OnNpcAdded(Form akActor)
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Meetings,OnNpcAdded_start,\n", true, false)
+	EndIf
 	Actor npc = akActor as Actor
-	If !npc || npc == PlayerRef || npc.IsDead()
+	; before the first scan the values read 0: a snapshot stored now would later read as "became Thane"
+	If !npc || npc == PlayerRef || npc.IsDead() || !World.Ready()
 		Return
 	EndIf
 	; Someone who does not know who the player is (hood, shadows) has no "since we last met"; the snapshot waits.
 	MLWW_Recognition recognition = Game.GetFormFromFile(0x000802, "Mantella Living World - World.esp") as MLWW_Recognition
-	If recognition && recognition.Unrecognised(recognition.Verdict(npc))
+	string verdict = ""
+	float at = StorageUtil.GetFloatValue(npc, "MLWW_VerdictAt", -1000.0)
+	float now = Utility.GetCurrentRealTime()
+	If at <= now && now - at < 10.0
+		verdict = StorageUtil.GetStringValue(npc, "MLWW_Verdict")  ; Recognition worked it out for this join
+	ElseIf recognition
+		verdict = recognition.Verdict(npc)
+	EndIf
+	If recognition && recognition.Unrecognised(verdict)
 		Return
 	EndIf
 	string line = Changes(npc)
 	If line != ""
 		MLWW_Util.Send("meetings", line)
+	EndIf
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Meetings,OnNpcAdded_end,\n", true, false)
 	EndIf
 EndEvent
 

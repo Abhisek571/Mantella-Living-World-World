@@ -2,10 +2,10 @@
     "identifier": "mantella_mlww_report_crime",
     "name": "ReportWitnessedCrime",
     "description": "Add a bounty for a crime a witness in this conversation saw the player commit.",
-    "note": "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards only. A guard adds a bounty only when another NPC (not one of your followers) is present as a witness, once per crime per talk and at most the vanilla bounty per crime per hold each day. This is a separate action from Mantella's own ReportCrime, which you can keep off.",
+    "note": "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards, stewards and Jarls only. A guard adds a bounty only when another NPC (not one of your followers) is present as a witness, once per crime per talk and at most the vanilla bounty per crime per hold each day. This is a separate action from Mantella's own ReportCrime, which you can keep off.",
     "key": "ReportWitnessedCrime",
     "enabled": true,
-    "lw_gate": "guard",
+    "lw_gate": "authority",
     "parameters": {
         "crime": {
             "type": "string",

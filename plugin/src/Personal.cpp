@@ -14,6 +14,7 @@
 
 #include "Personal.h"
 
+#include "Battle.h"
 #include "Writer.h"
 
 #include <atomic>
@@ -176,6 +177,12 @@ namespace MLWW::Personal
 				SKSE::GetTaskInterface()->AddTask([]() {
 					CheckCrime();
 					CheckParty();
+					try {
+						Battle::Tick();
+					} catch (const std::exception& e) {  // battles.json with a wrong-typed field: the accounts are dropped
+						logger::error("battle accounts dropped after an error: {}", e.what());
+						Battle::Reset(true);
+					}
 				});
 				PollCrime();  // re-armed from the worker thread, never from inside the task
 			});
@@ -777,7 +784,168 @@ namespace MLWW::Personal
 			Task([dying = a_event.actorDying, killerHandle = credit->GetHandle(), hostile = victim->IsHostileToActor(player)]() { OnKill(dying, killerHandle, hostile); });
 		}
 
+		// ---------------------------------------------------------------------------
+		// Quest progress for world.json (MLWW_State). The quests Knowledge asks about are read here in one native call
+		// instead of about five frame-bound Papyrus calls per quest. Stage and start/stop events mark a quest changed;
+		// the next batch re-reads only the changed ones. The JSON keys are the ids as asked (Knowledge's spelling, the
+		// keys the Papyrus scan wrote), since Knowledge looks the quests up by its own spelling.
+		// ---------------------------------------------------------------------------
+		struct QuestRow
+		{
+			RE::TESQuest* quest{ nullptr };
+			std::string   id;  // the id as asked
+			std::int32_t  stage{ 0 };
+			std::int32_t  state{ 0 };  // 0 not started, 1 running, 2 done
+		};
+		std::mutex                                     g_questLock;
+		std::unordered_map<std::string, RE::TESQuest*> g_questsById;      // lower-case editor id -> quest, built at kDataLoaded
+		std::vector<QuestRow>                          g_questRows;       // the asked-for quests as last read, in the order asked
+		std::unordered_set<RE::FormID>                 g_questChanged;    // quests whose stage or run state changed since the last batch
+		std::unordered_set<RE::FormID>                 g_outcomeQuests;   // quests the outcome table names (WatchOutcomeQuests)
+		bool                                           g_outcomeChanged = false;
+
+		std::string LowerId(std::string_view a_text)
+		{
+			std::string out(a_text);
+			std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			return out;
+		}
+
+		void IndexQuests()
+		{
+			auto* data = RE::TESDataHandler::GetSingleton();
+			if (!data) {
+				return;
+			}
+			std::scoped_lock lock(g_questLock);
+			for (auto* quest : data->GetFormArray<RE::TESQuest>()) {
+				const char* id = quest ? quest->GetFormEditorID() : nullptr;
+				if (id && *id) {
+					g_questsById.emplace(LowerId(id), quest);
+				}
+			}
+		}
+
+		// Papyrus' Quest.IsRunning: started and not starting or stopping (CommonLib's TESQuest::IsRunning is also true
+		// for a quest that was never started).
+		bool QuestRunning(const RE::TESQuest* a_quest)
+		{
+			return a_quest->IsEnabled() && !(a_quest->data.flags == RE::QuestFlag::kStopStart) && !a_quest->promoteTask;
+		}
+
+		// The rule the Papyrus scan used: stage 0 is not started, even for a quest that runs from the start of the game
+		// (C00, CW00A, DLC1VQ00); a quest that stopped after starting is over, completed or not (pointer quests never
+		// complete).
+		void ReadRow(QuestRow& a_row)
+		{
+			const auto* quest = a_row.quest;
+			const bool  running = QuestRunning(quest);
+			a_row.stage = quest->GetCurrentStageID();
+			a_row.state = 0;
+			if (quest->IsCompleted() || (!running && a_row.stage > 0)) {
+				a_row.state = 2;
+			} else if (running && a_row.stage > 0) {
+				a_row.state = 1;
+			}
+		}
+
+		// Main thread (queued by the stage and start/stop sinks).
+		void OnQuestChanged(RE::FormID a_quest)
+		{
+			bool first = false;
+			{
+				std::scoped_lock lock(g_questLock);
+				first = g_questChanged.empty();
+				g_questChanged.insert(a_quest);
+				if (g_outcomeQuests.contains(a_quest)) {
+					g_outcomeChanged = true;
+				}
+			}
+			if (first) {
+				SendModEvent("MLWW_QuestChanged", "", 0.0f, nullptr);  // one event per batch: MLWW_State takes them all
+			}
+		}
+
 		// Natives
+		// Reads every quest in a_ids (editor ids; unknown ones are left out) and keeps them for QuestStagesJson,
+		// QuestStatesJson and ReadChangedQuests. Returns how many were found. Main thread (not callable from tasklets).
+		std::int32_t ReadQuests(RE::StaticFunctionTag*, std::vector<RE::BSFixedString> a_ids)
+		{
+			std::scoped_lock lock(g_questLock);
+			g_questRows.clear();
+			g_questChanged.clear();  // every quest is read now
+			std::unordered_set<RE::TESQuest*> seen;
+			for (const auto& id : a_ids) {
+				auto it = g_questsById.find(LowerId(id.c_str()));
+				if (it == g_questsById.end() || !it->second || !seen.insert(it->second).second) {
+					continue;
+				}
+				QuestRow row{ it->second, id.c_str() };
+				ReadRow(row);
+				g_questRows.push_back(std::move(row));
+			}
+			logger::info("quests read: {} of {} found", g_questRows.size(), a_ids.size());
+			return static_cast<std::int32_t>(g_questRows.size());
+		}
+
+		// Re-reads only the kept quests that changed since the last read. Returns how many of them changed, or -1 when
+		// no quest at all changed (the stage events also cover quests nobody asked about).
+		std::int32_t ReadChangedQuests(RE::StaticFunctionTag*)
+		{
+			std::scoped_lock lock(g_questLock);
+			if (g_questChanged.empty()) {
+				return -1;
+			}
+			std::int32_t count = 0;
+			for (auto& row : g_questRows) {
+				if (g_questChanged.contains(row.quest->GetFormID())) {
+					ReadRow(row);
+					++count;
+				}
+			}
+			logger::info("quest changes: {}, {} of them asked for", g_questChanged.size(), count);
+			g_questChanged.clear();
+			return count;
+		}
+
+		std::string QuestJson(bool a_states)
+		{
+			std::scoped_lock lock(g_questLock);
+			std::string out = "{";
+			for (const auto& row : g_questRows) {
+				if (out.size() > 1) {
+					out += ',';
+				}
+				out += std::format("\"{}\":{}", row.id, a_states ? row.state : row.stage);  // only ids that matched an editor id: letters, digits and _
+			}
+			return out + "}";
+		}
+
+		// {"MQ101":20,...}: the kept quests' current stages.
+		RE::BSFixedString QuestStagesJson(RE::StaticFunctionTag*) { return QuestJson(false); }
+
+		// {"MQ101":1,...}: 0 not started, 1 running, 2 done.
+		RE::BSFixedString QuestStatesJson(RE::StaticFunctionTag*) { return QuestJson(true); }
+
+		// The quests the outcome table names: a change to one of them makes OutcomeQuestsChanged true.
+		void WatchOutcomeQuests(RE::StaticFunctionTag*, std::vector<RE::TESQuest*> a_quests)
+		{
+			std::scoped_lock lock(g_questLock);
+			g_outcomeQuests.clear();
+			for (auto* quest : a_quests) {
+				if (quest) {
+					g_outcomeQuests.insert(quest->GetFormID());
+				}
+			}
+		}
+
+		// True (once) when a watched outcome quest changed since the last call.
+		bool OutcomeQuestsChanged(RE::StaticFunctionTag*)
+		{
+			std::scoped_lock lock(g_questLock);
+			return std::exchange(g_outcomeChanged, false);
+		}
+
 		std::vector<RE::Actor*> Party(RE::StaticFunctionTag*) { return PartyNow(); }
 
 		// Gold in the merchant's vendor chest now; -1 when they have none.
@@ -819,6 +987,7 @@ namespace MLWW::Personal
 		}
 		static Sink<RE::TESDeathEvent> death([](const RE::TESDeathEvent& e) {
 			OnPartyDeathEvent(e);
+			Battle::Death(e);
 			if (e.dead) {
 				auto*            victim = e.actorDying ? e.actorDying->As<RE::Actor>() : nullptr;
 				auto*            player = Player();
@@ -831,6 +1000,7 @@ namespace MLWW::Personal
 		});
 		static Sink<RE::TESHitEvent> hit([](const RE::TESHitEvent& e) {
 			OnPartyHitEvent(e);
+			Battle::Hit(e);
 			auto* player = Player();
 			auto* actor = e.target ? e.target->As<RE::Actor>() : nullptr;
 			if (!actor || !e.cause || e.cause.get() != player || actor->IsPlayerTeammate() || actor->IsCommandedActor()) {
@@ -839,8 +1009,17 @@ namespace MLWW::Personal
 			const bool hostile = actor->IsHostileToActor(player);
 			Task([target = e.target, source = e.source, hostile]() { OnHit(target, source, hostile); });
 		});
-		static Sink<RE::TESMagicEffectApplyEvent> magic(OnMagicEffectEvent);
-		static Sink<RE::TESEnterBleedoutEvent>    bleedout(OnBleedoutEvent);
+		static Sink<RE::TESMagicEffectApplyEvent> magic([](const RE::TESMagicEffectApplyEvent& e) {
+			OnMagicEffectEvent(e);
+			Battle::Magic(e);
+		});
+		static Sink<RE::TESSpellCastEvent> cast([](const RE::TESSpellCastEvent& e) {
+			Battle::Cast(e);
+		});
+		static Sink<RE::TESEnterBleedoutEvent> bleedout([](const RE::TESEnterBleedoutEvent& e) {
+			OnBleedoutEvent(e);
+			Battle::Bleedout(e);
+		});
 		static Sink<RE::TESActivateEvent> activate([](const RE::TESActivateEvent& e) {
 			// The sleep state is read right away: the activation is what wakes them.
 			if (e.actionRef && e.actionRef.get() == Player()) {
@@ -848,8 +1027,11 @@ namespace MLWW::Personal
 			}
 		});
 		static Sink<RE::TESContainerChangedEvent> moved([](const RE::TESContainerChangedEvent& e) {
-			auto*        player = Player();
-			RE::TESForm* owner = player && e.newContainer == player->GetFormID() ? OwnerOfTake(e.oldContainer, e.reference) : nullptr;
+			auto* player = Player();
+			if (!player || (e.newContainer != player->GetFormID() && e.oldContainer != player->GetFormID())) {
+				return;  // only the player's own gains and losses matter (OnMoved): no task for every loot or restock
+			}
+			RE::TESForm* owner = e.newContainer == player->GetFormID() ? OwnerOfTake(e.oldContainer, e.reference) : nullptr;
 			Task([from = e.oldContainer, to = e.newContainer, base = e.baseObj, count = e.itemCount, owner]() { OnMoved(from, to, base, count, owner); });
 		});
 		static Sink<RE::MenuOpenCloseEvent> menu([](const RE::MenuOpenCloseEvent& e) {
@@ -864,10 +1046,20 @@ namespace MLWW::Personal
 		holder->AddEventSink<RE::TESDeathEvent>(&death);
 		holder->AddEventSink<RE::TESHitEvent>(&hit);
 		holder->AddEventSink<RE::TESMagicEffectApplyEvent>(&magic);
+		holder->AddEventSink<RE::TESSpellCastEvent>(&cast);
 		holder->AddEventSink<RE::TESEnterBleedoutEvent>(&bleedout);
 		holder->AddEventSink<RE::TESActivateEvent>(&activate);
+		static Sink<RE::TESQuestStageEvent> stage([](const RE::TESQuestStageEvent& e) {
+			Task([quest = e.formID]() { OnQuestChanged(quest); });
+		});
+		static Sink<RE::TESQuestStartStopEvent> startStop([](const RE::TESQuestStartStopEvent& e) {
+			Task([quest = e.formID]() { OnQuestChanged(quest); });
+		});
 		holder->AddEventSink<RE::TESContainerChangedEvent>(&moved);
+		holder->AddEventSink<RE::TESQuestStageEvent>(&stage);
+		holder->AddEventSink<RE::TESQuestStartStopEvent>(&startStop);
 		ui->AddEventSink<RE::MenuOpenCloseEvent>(&menu);
+		IndexQuests();
 		if (auto* data = RE::TESDataHandler::GetSingleton()) {
 			for (auto* faction : data->GetFormArray<RE::TESFaction>()) {
 				if (faction && (faction->data.flags & RE::FACTION_DATA::Flag::kTrackCrime)) {
@@ -875,6 +1067,7 @@ namespace MLWW::Personal
 				}
 			}
 		}
+		Battle::Start();
 		PollCrime();
 		logger::info("personal event listeners registered ({} crime factions)", g_crimeFactions.size());
 	}
@@ -905,13 +1098,27 @@ namespace MLWW::Personal
 		g_down.clear();
 		g_playerLow = {};
 		g_health.clear();
+		std::scoped_lock lock(g_questLock);  // the quests read belong to the game left behind; MLWW_State reads them again
+		g_questRows.clear();
+		g_questChanged.clear();
+		g_outcomeChanged = false;
 	}
+
+	bool InParty(RE::Actor* a_actor) { return IsMember(a_actor); }
+
+	std::vector<RE::Actor*> PartyHere() { return PartyNow(); }
 
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* a_vm)
 	{
 		a_vm->RegisterFunction("WornStolenFrom", "MLWW_Native", WornStolenFrom);
 		a_vm->RegisterFunction("Party", "MLWW_Native", Party);
 		a_vm->RegisterFunction("ChestGold", "MLWW_Native", ChestGoldOf);
+		a_vm->RegisterFunction("ReadQuests", "MLWW_Native", ReadQuests);
+		a_vm->RegisterFunction("ReadChangedQuests", "MLWW_Native", ReadChangedQuests);
+		a_vm->RegisterFunction("QuestStagesJson", "MLWW_Native", QuestStagesJson);
+		a_vm->RegisterFunction("QuestStatesJson", "MLWW_Native", QuestStatesJson);
+		a_vm->RegisterFunction("WatchOutcomeQuests", "MLWW_Native", WatchOutcomeQuests);
+		a_vm->RegisterFunction("OutcomeQuestsChanged", "MLWW_Native", OutcomeQuestsChanged);
 		return true;
 	}
 }

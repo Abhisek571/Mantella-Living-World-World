@@ -14,6 +14,8 @@
 
 #include "Writer.h"
 
+#include <map>
+
 namespace MLWW::Writer
 {
 	namespace
@@ -37,6 +39,10 @@ namespace MLWW::Writer
 
 		// Worker-thread only.
 		std::deque<nlohmann::json> g_lines;
+		std::map<std::filesystem::path, std::uint64_t> g_writeGen;  // the newest write of each file
+
+		constexpr int  kRenameTries = 100;
+		constexpr auto kRenameRetry = std::chrono::milliseconds(100);
 
 		void LoadExisting()
 		{
@@ -62,20 +68,41 @@ namespace MLWW::Writer
 			}
 		}
 
-		void WriteFile()
+		std::filesystem::path TempOf(const std::filesystem::path& a_file)
 		{
-			nlohmann::json root;
-			root["lines"] = nlohmann::json::array();
-			for (auto& line : g_lines) {
-				root["lines"].push_back(line);
-			}
-			const auto text = root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
-
-			std::error_code ec;
-			std::filesystem::create_directories(kFile.parent_path(), ec);
-
-			auto tmp = kFile;
+			auto tmp = a_file;
 			tmp += L".tmp";
+			return tmp;
+		}
+
+		// The temp file of write a_gen replaces a_file once no reader holds it open. A newer write of the same file
+		// (which reuses the temp file) ends these retries; after kRenameTries the temp file stays and is logged.
+		void RetryRename(std::filesystem::path a_file, std::uint64_t a_gen, int a_tries)
+		{
+			RunLater(kRenameRetry, [file = std::move(a_file), a_gen, a_tries]() {
+				if (g_writeGen[file] != a_gen) {
+					return;
+				}
+				std::error_code ec;
+				std::filesystem::rename(TempOf(file), file, ec);
+				if (!ec) {
+					return;
+				}
+				if (a_tries + 1 < kRenameTries) {
+					RetryRename(file, a_gen, a_tries + 1);
+				} else {
+					logger::warn("rename to {} kept failing ({}); the new data stays in the .tmp file", file.string(), ec.message());
+				}
+			});
+		}
+
+		void WriteText(const std::filesystem::path& a_file, const std::string& text)
+		{
+			const auto gen = ++g_writeGen[a_file];
+			std::error_code ec;
+			std::filesystem::create_directories(a_file.parent_path(), ec);
+
+			const auto tmp = TempOf(a_file);
 			{
 				std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
 				if (!out) {
@@ -88,17 +115,23 @@ namespace MLWW::Writer
 					return;
 				}
 			}
-			// std::filesystem::rename replaces an existing target on Windows.
-			std::filesystem::rename(tmp, kFile, ec);
+			// std::filesystem::rename replaces an existing target on Windows, but not while a reader has it open (the
+			// Mantella side reading it). Never a direct, truncating write (a reader could see half a file): the rename is
+			// tried again later from the job queue, so the worker's other timed jobs never wait behind it.
+			std::filesystem::rename(tmp, a_file, ec);
 			if (ec) {
-				// Fallback: direct write, so the data still lands even if rename is refused.
-				logger::warn("rename to {} failed ({}), writing directly", kFile.string(), ec.message());
-				std::ofstream out(kFile, std::ios::binary | std::ios::trunc);
-				if (out) {
-					out.write(text.data(), static_cast<std::streamsize>(text.size()));
-				}
-				std::filesystem::remove(tmp, ec);
+				RetryRename(a_file, gen, 0);
 			}
+		}
+
+		void WriteFile()
+		{
+			nlohmann::json root;
+			root["lines"] = nlohmann::json::array();
+			for (auto& line : g_lines) {
+				root["lines"].push_back(line);
+			}
+			WriteText(kFile, root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 		}
 
 		void Worker()
@@ -184,6 +217,11 @@ namespace MLWW::Writer
 							  } });
 		}
 		g_cv.notify_one();
+	}
+
+	void Save(std::filesystem::path a_file, std::string a_text)
+	{
+		RunLater(0ms, [file = std::move(a_file), text = std::move(a_text)]() { WriteText(file, text); });
 	}
 
 	void RunLater(std::chrono::milliseconds a_delay, std::function<void()> a_fn)

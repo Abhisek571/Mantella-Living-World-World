@@ -13,11 +13,16 @@ QUESTS = [
     ('000805', 'MLWW_QuestBanter', 'MLWW_Banter', 'Mantella Living World - World banter', False),
     ('000806', 'MLWW_QuestInitiative', 'MLWW_Initiative', 'Mantella Living World - World initiative', False),
     ('000807', 'MLWW_QuestPersonal', 'MLWW_Personal', 'Mantella Living World - World personal', False),
+    ('000808', 'MLWW_QuestTrade', 'MLWW_Trade', 'Mantella Living World - World trade', False),
 ]
 # Settings (World page of the Integration Hub's MCM): form id, editor id, type, value, the script that uses it
 GLOBALS = [('000810', 'MLWW_BanterOn', 'GlobalShort', 1, 'MLWW_Banter'),
            ('000811', 'MLWW_BanterChance', 'GlobalShort', 30, 'MLWW_Banter'),
-           ('000812', 'MLWW_InitiativeOn', 'GlobalShort', 1, 'MLWW_Initiative')]
+           ('000812', 'MLWW_InitiativeOn', 'GlobalShort', 1, 'MLWW_Initiative'),
+           # battle accounts: read by the SKSE plugin, no script
+           ('000813', 'MLWW_BattleOn', 'GlobalShort', 1, None),
+           ('000814', 'MLWW_BattleBystanders', 'GlobalShort', 0, None),
+           ('000815', 'MLWW_BattleHours', 'GlobalShort', 6, None)]
 STATE = QUESTS[0][0]
 
 
@@ -43,35 +48,61 @@ for fid, eid, script, name, needs_state in QUESTS:
 for gfid, gname, typ, val, _ in GLOBALS:
     write(f'esp/Globals/{gname} - {gfid}_{E}.yaml', f'MutagenObjectType: {typ}\nFormKey: {gfid}:{E}\nEditorID: {gname}\nData: {val}\n')
 write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n  Flags:\n  - Small\n  Author: itsPigeon2000\n'
-      '  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk, what the player did to each NPC.\n'
+      '  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk, what the player did to each NPC, battle accounts, trading by talk.\n'
       '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n')
 write('esp/spriggit-meta.json', json.dumps({'PackageName': 'Spriggit.Yaml.Skyrim', 'Version': '0.40.0', 'Release': 'SkyrimSE', 'ModKey': E}, indent=2))
 
-NOTE = "Needs Mantella Living World - World. Turn off Mantella's own AbsolveCrime and ReportCrime (separate actions from SettleCrime and ReportWitnessedCrime)."
+SETTLE_NOTE = "Needs Mantella Living World - World. Guards, stewards and Jarls only. Every way of settling asks you Yes/No first (letting a bounty go hands over any stolen goods). Bribe and persuade need Advanced Actions on in Mantella. Keep Mantella's own AbsolveCrime off."
+REPORT_NOTE = "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards, stewards and Jarls only. A guard adds a bounty only when another NPC (not one of your followers) is present as a witness, once per crime per talk and at most the vanilla bounty per crime per hold each day. This is a separate action from Mantella's own ReportCrime, which you can keep off."
+TRADE_NOTE = ("Needs Mantella Living World - World and Advanced Actions on in Mantella (it names the amount or the item). "
+              "Followers, friends and lovers give and take freely; a stranger hands over gold or goods only as payment for what "
+              "you handed them in the same talk. Anything you hand over asks you Yes/No first.")
+AMOUNT = {'type': 'integer', 'minimum': 1, 'maximum': 100000}
+ITEM = {'type': 'string', 'description': 'Item name, for the item kinds.'}
+COUNT = {'type': 'integer', 'minimum': 1, 'maximum': 1000, 'description': 'How many; default 1.'}
 ACTIONS = [
-    {'identifier': 'mantella_mlww_settle_crime', 'name': 'SettleCrime',
+    {'identifier': 'mantella_mlww_settle_crime', 'name': 'SettleCrime', 'note': SETTLE_NOTE, 'lw_gate': 'authority',
      'description': "Settle the player's non-violent bounty in your hold: pay it, take a bribe, or let it go when persuaded.",
-     'key': 'SettleCrime',
      'parameters': {'method': {'type': 'string', 'enum': ['pay', 'bribe', 'persuade'],
                                'description': 'pay: the player pays the bounty; bribe: the player pays you extra to forget it; persuade: you let a minor bounty go.'}},
      'required': ['method'],
      'one-on-one': True,
      'prompt': "If you are a guard, steward or Jarl and agree to settle the player's bounty (paid, bribed or persuaded), begin your response with '{key}:'"},
     # Not "ReportCrime": Mantella's Disabled Actions matches by name, and its own ReportCrime is disabled by default.
-    {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportWitnessedCrime',
+    {'identifier': 'mantella_mlww_report_crime', 'name': 'ReportWitnessedCrime', 'note': REPORT_NOTE, 'lw_gate': 'authority',
      'description': 'Add a bounty for a crime a witness in this conversation saw the player commit.',
-     'key': 'ReportWitnessedCrime',
      'parameters': {'crime': {'type': 'string', 'enum': ['trespassing', 'lockpicking', 'assault', 'murder'],
                               'description': 'The crime the witness saw.'}},
      'required': ['crime'],
      # The witness must be another NPC in the talk, so a one-on-one talk can never use it.
      'one-on-one': False,
      'prompt': "If you are a guard, steward or Jarl and someone here tells you they saw the player commit a crime, begin your response with '{key}:'"},
+    # Trading by talk (MLWW_Trade): one action, the kind of trade inside. The Hub keeps only the first sentence of the
+    # description (the action has no gate), so that sentence holds the stranger rule.
+    {'identifier': 'mantella_mlww_trade', 'name': 'Trade', 'note': TRADE_NOTE + " offer_trade is for merchants only.",
+     'description': "Moves real gold or goods: a merchant sells a ware the player asks to buy by name with offer_trade, at the shop price unless another was agreed (Barter only opens the shop menu to browse); a stranger pays only for what the player handed over first.",
+     # live test 14: "a named item at the agreed price" lost "from their wares", and with "you give only what you carry"
+     # Lucan refused a potion his chest held ("not among what I'm carrying"); OfferTrade takes no price as the shop price
+     # live test 15: "once agreed ... a price agreed in talk" kept a plain "I'd like to buy X" (no price) on Barter
+     'parameters': {'kind': {'type': 'string', 'enum': ['give_gold', 'ask_gold', 'give_item', 'ask_item', 'offer_trade', 'take_gift'],
+                             'description': 'give_*: you hand over what you carry; ask_*: the player hands it to you; '
+                                            'offer_trade: a merchant sells a ware asked for from the shop; take_gift: opens the gift menu.'},
+                    'amount': dict(AMOUNT, description='Gold, for give_gold and ask_gold.'),
+                    'item': ITEM, 'count': COUNT,
+                    'price': dict(AMOUNT, description='offer_trade: the agreed gold for all of it; leave out for the shop price.')},
+     'required': ['kind'],
+     # Without arguments (Advanced Actions off) only the gift menu can be opened, as TakeGift did.
+     'prompt': "When the player wants to give you something, begin your response with '{key}:'"},
 ]
 for a in ACTIONS:
-    data = {'identifier': a['identifier'], 'name': a['name'], 'description': a['description'], 'note': NOTE, 'key': a['key'],
-            'enabled': True, 'lw_gate': 'guard', 'parameters': a['parameters'], 'required': a['required'], 'prompt': a['prompt'],
-            'allowed_games': ['skyrim'], 'requires_response': True, 'is-interrupting': False, 'allow_repeat': False,
-            'one-on-one': a['one-on-one'], 'multi-npc': True, 'radiant': False}
+    data = {'identifier': a['identifier'], 'name': a['name'], 'description': a['description'], 'note': a['note'], 'key': a['name'],
+            'enabled': True}
+    if a.get('lw_gate'):
+        data['lw_gate'] = a['lw_gate']
+    data.update({'parameters': a['parameters'], 'required': a['required'], 'prompt': a['prompt'],
+                 'allowed_games': ['skyrim'], 'requires_response': True, 'is-interrupting': False,
+                 # trades may follow each other (two items, a lower amount after a refusal)
+                 'allow_repeat': a['identifier'] not in ('mantella_mlww_settle_crime', 'mantella_mlww_report_crime'),
+                 'one-on-one': a.get('one-on-one', True), 'multi-npc': True, 'radiant': False})
     write(f"SKSE/Plugins/MantellaSoftware/data/actions/{a['identifier']}.json", json.dumps(data, indent=4) + '\n')
 print('world records written:', len(QUESTS), 'quests,', len(ACTIONS), 'actions')

@@ -26,6 +26,7 @@ add_commonlibsse_plugin(${PROJECT_NAME}
 	AUTHOR "itsPigeon2000"
 	SOURCES
 		src/main.cpp
+		src/Battle.cpp
 		src/Listener.cpp
 		src/Personal.cpp
 		src/Writer.cpp

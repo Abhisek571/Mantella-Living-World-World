@@ -26,6 +26,9 @@ Function Register()
 EndFunction
 
 Event OnNpcAdded(Form akActor)
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Pairs,OnNpcAdded_start,\n", true, false)
+	EndIf
 	Actor npc = akActor as Actor
 	If !npc || npc == PlayerRef
 		Return
@@ -48,6 +51,9 @@ Event OnNpcAdded(Form akActor)
 	EndWhile
 	StorageUtil.FormListAdd(None, KEY_MEMBERS, npc, false)
 	StorageUtil.SetFloatValue(npc, "MLWW_PairsAdded", Utility.GetCurrentRealTime())
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Pairs,OnNpcAdded_end,\n", true, false)
+	EndIf
 EndEvent
 
 Event OnNpcRemoved(Form akActor)
@@ -62,6 +68,9 @@ EndEvent
 ; Ended does not always arrive, and Started comes after the first NPC_Added (as in the Hub's channel): members who
 ; joined more than 30 seconds before this talk started are left over from an earlier one.
 Event OnConversationStarted()
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Pairs,OnConversationStarted_start,\n", true, false)
+	EndIf
 	float now = Utility.GetCurrentRealTime()
 	int i = StorageUtil.FormListCount(None, KEY_MEMBERS)
 	While i > 0
@@ -73,6 +82,9 @@ Event OnConversationStarted()
 	EndWhile
 	; Pairs told in a talk that never sent Ended may be told again; a pair is only told on NPC_Added, once per member.
 	StorageUtil.StringListClear(None, KEY_TOLD)
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Pairs,OnConversationStarted_end,\n", true, false)
+	EndIf
 EndEvent
 
 Event OnConversationEnded()
@@ -145,9 +157,14 @@ string Function Line(Actor akA, Actor akB, int aiLevel)
 	Return both + " are strangers to each other."
 EndFunction
 
-; The player's household: close in Relationships (spouse), an adopted child or the house steward.
+; The player's household: the player's spouse, an adopted child or the house steward. Married by the game
+; (PlayerMarriedFaction) or through M.A.R.A.S as Relationships writes it (MRB_Close and the npc file's "maras" 3, or 4 in
+; a marriage crisis). Relationships also marks the engaged, dating and lovers close: they are not the household.
 bool Function Household(Actor akActor)
-	If StorageUtil.GetIntValue(akActor, "MRB_Close") > 0
+	Faction married = Game.GetFormFromFile(0x0C6472, "Skyrim.esm") as Faction  ; PlayerMarriedFaction
+	If married && akActor.IsInFaction(married)
+		Return true
+	ElseIf StorageUtil.GetIntValue(akActor, "MRB_Close") > 0 && JsonUtil.GetIntValue("MantellaLivingWorld/npc/" + MLWW_Util.BaseId(akActor) + ".json", "maras", 0) >= 3
 		Return true
 	EndIf
 	Faction adopted = Game.GetFormFromFile(0x0042B0, "HearthFires.esm") as Faction  ; BYOHRelationshipAdoptionFaction

@@ -9,6 +9,24 @@ Event OnPlayerLoadGame()
 	EndIf
 EndEvent
 
+; Armour and clothing only: what covers the player's face decides recognition (MLWW_Recognition).
+Event OnObjectEquipped(Form akBaseObject, ObjectReference akReference)
+	GearChanged(akBaseObject)
+EndEvent
+
+Event OnObjectUnequipped(Form akBaseObject, ObjectReference akReference)
+	GearChanged(akBaseObject)
+EndEvent
+
+Function GearChanged(Form akBaseObject)
+	If akBaseObject as Armor
+		MLWW_Job job = GetOwningQuest() as MLWW_Job
+		If job
+			job.PlayerGearChanged()
+		EndIf
+	EndIf
+EndFunction
+
 Event OnLocationChange(Location akOldLoc, Location akNewLoc)
 	MLWW_Job job = GetOwningQuest() as MLWW_Job
 	If job

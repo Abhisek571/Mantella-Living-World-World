@@ -7,11 +7,14 @@ the NPC joins a conversation, sends one line with what still matters, at most fo
   after the player sold to them (2 days, the time vanilla takes to restock).
 Deaths are only recorded here (the day); Relationships uses them for grief. A murder (a person who was no enemy, killed by
 the player) is stamped with its day and hold for MLWW_Crime's murder report.
+A murder of, or an attack on, a Thalmor: the people close by (not the party) saw it, and for 3 days their line says so,
+with MLWW_Util.ThalmorClause (folk outside the big walled cities do not much care). Only words: no bounty changes.
 What lasts (lifetime trade, heals, rescues, kills, fights, friendly fire) is kept by MLWW_Facts and written to the NPC's
-file as facts: when they join a conversation and otherwise at most once per FACT_DELAY.}
+file as facts: when they join a conversation and otherwise at most once per FACT_DELAY.
+Murders and attacks by the player, and deaths of named people the player did not kill, are also added to
+MantellaLivingWorld/crimes.json for the Hub's world log (see LogCrime).}
 
 string Property KEY_DIED = "MLWW_DiedDay" AutoReadOnly
-string Property KEY_DIED_BY_PLAYER = "MLWW_DiedByPlayer" AutoReadOnly
 string Property KEY_STRUCK = "MLWW_StruckDay" AutoReadOnly
 string Property KEY_WOKEN = "MLWW_WokenAt" AutoReadOnly
 string Property KEY_WOKEN_HOUR = "MLWW_WokenHour" AutoReadOnly
@@ -22,6 +25,17 @@ string Property KEY_SOLD = "MLWW_TradeSold" AutoReadOnly        ; gold they paid
 string Property KEY_CHEST_DAY = "MLWW_ChestDay" AutoReadOnly
 string Property KEY_CAUGHT = "MLWW_CaughtDay" AutoReadOnly      ; on CaughtKey: a named NPC's base, else the actor
 string Property KEY_CAUGHT_KIND = "MLWW_CaughtKind" AutoReadOnly
+string Property KEY_THALMOR = "MLWW_SawThalmorAt" AutoReadOnly         ; on a witness: when the player harmed a Thalmor
+string Property KEY_THALMOR_KILLED = "MLWW_SawThalmorKilled" AutoReadOnly  ; 1 killed, 0 attacked
+string Property KEY_THALMOR_NAME = "MLWW_SawThalmorName" AutoReadOnly
+float Property THALMOR_DAYS = 3.0 AutoReadOnly
+float Property WITNESS_RANGE = 3072.0 AutoReadOnly  ; as the battle record's bystanders
+int Property MAX_WITNESSES = 40 AutoReadOnly
+string Property CRIMES_FILE = "MantellaLivingWorld/crimes.json" AutoReadOnly
+int Property MAX_CRIME_ROWS = 200 AutoReadOnly       ; per list; the oldest rows go first
+int Property MAX_CRIME_WITNESSES = 12 AutoReadOnly
+string Property KEY_ASSAULT_DAY = "MLWW_AssaultLoggedDay" AutoReadOnly  ; on the victim: the day an attack row was written
+string Property KEY_ASSAULT_ROW = "MLWW_AssaultRowId" AutoReadOnly      ; that row's id, replaced if they are killed that day
 
 float Property MEMORY_DAYS = 30.0 AutoReadOnly
 float Property WOKEN_DAYS = 0.05 AutoReadOnly    ; about an hour of game time
@@ -33,6 +47,7 @@ string Property KEY_STALE = "MLWW_StaleFacts" AutoReadOnly     ; NPCs whose fact
 float Property FACT_DELAY = 30.0 AutoReadOnly
 
 bool factWritePending = false
+bool crimeLogging = false
 
 Function Register()
 	RegisterForModEvent("MLWW_Healed", "OnHealed")
@@ -43,6 +58,7 @@ Function Register()
 	RegisterForModEvent("MLWW_Defended", "OnDefended")
 	RegisterForModEvent("MLWW_TradeGoods", "OnTradeGoods")
 	factWritePending = false
+	crimeLogging = false  ; a save made inside AppendRow whose stack a script update dropped must not hold it for good
 	If StorageUtil.FormListCount(self, KEY_STALE) > 0
 		QueueFacts(None)
 	EndIf
@@ -64,7 +80,9 @@ EndFunction
 Event OnDied(string asEvent, string asText, float afByPlayer, Form akSender)
 	If akSender
 		StorageUtil.SetFloatValue(akSender, KEY_DIED, Utility.GetCurrentGameTime())
-		StorageUtil.SetIntValue(akSender, KEY_DIED_BY_PLAYER, afByPlayer as int)
+		If afByPlayer <= 0.0
+			LogDeath(akSender as Actor)  ; a killing by the player is a murder row (OnMurder) or a fight's
+		EndIf
 	EndIf
 EndEvent
 
@@ -91,13 +109,238 @@ Event OnMurder(string asEvent, string asCrime, float afNum, Form akSender)
 	If crime
 		StorageUtil.SetFloatValue(crime, "MLWW_MurderDay", today)
 	EndIf
+	; Whether that murder was of a Thalmor, kept beside each day for MLWW_Crime's report line.
+	int thalmor = MLWW_Util.IsThalmor(akSender as Actor) as int
+	If hold >= 0
+		StorageUtil.SetIntValue(None, "MLWW_MurderThalmor_" + hold, thalmor)
+	EndIf
+	If crime
+		StorageUtil.SetIntValue(crime, "MLWW_MurderThalmor", thalmor)
+	EndIf
+	If thalmor
+		SawThalmor(akSender as Actor, true)
+	EndIf
+	LogCrime(akSender as Actor, "murder", hold)
 EndEvent
 
 Event OnStruck(string asEvent, string asText, float afNum, Form akSender)
+	Faction brawl = Game.GetFormFromFile(0x04CFA6, "Skyrim.esm") as Faction  ; DGIntimidateFaction: a bar brawl is no assault
+	If brawl && akSender as Actor && (akSender as Actor).IsInFaction(brawl)
+		Return
+	EndIf
 	If akSender
 		StorageUtil.SetFloatValue(akSender, KEY_STRUCK, Utility.GetCurrentGameTime())
+		If MLWW_Util.IsThalmor(akSender as Actor)
+			SawThalmor(akSender as Actor, false)
+		EndIf
+		LogCrime(akSender as Actor, "assault", -1)
 	EndIf
 EndEvent
+
+; ---------------------------------------------------------------------------
+; crimes.json: what the Hub's world log reads (worldlog.from_crime / from_death). One JSON object shared by every save:
+;   {"player": <last writer>, "crimes": [row...], "deaths": [row...]}, each list append-only, at most MAX_CRIME_ROWS.
+; A crime row: {id, crime: murder/assault, day, place, town, hold, victim: {base, ref_id, name, thalmor},
+;   witnesses: [{base, ref_id, name}], by_player: true, player}. A death row: {id, base, ref_id, name, day, place, town,
+;   hold, by_player: false, unique: true, witnesses, player}. Children are never victims here, and a child witness is
+;   listed without a name ({base, ref_id, minor: 1}). A crime row has "masked":1 when a hood hid the player's face where
+;   that hides who they are (as MLWW_Recognition): the Hub names "a hooded stranger" to those who do not know the player.
+;   The player's followers are never witnesses (InParty): they were with the player, not onlookers who spread it.
+; ---------------------------------------------------------------------------
+
+; A murder or an attack by the player on a person (not the party). One attack row per person per day; a murder the same
+; day replaces that attack row. aiHold: the hold of the victim's crime faction, used when the place has none.
+Function LogCrime(Actor akVictim, string asCrime, int aiHold)
+	If !akVictim || akVictim == PlayerRef || akVictim.IsChild() || akVictim.IsPlayerTeammate() || !akVictim.HasKeyword(Keyword.GetKeyword("ActorTypeNPC"))
+		Return
+	EndIf
+	float now = Utility.GetCurrentGameTime()
+	string ref = MLWW_Util.Hex(akVictim.GetFormID(), 8)
+	string id = asCrime + "-" + ref + "-" + ((now * 1000.0) as int)
+	string replace = ""
+	bool attackedToday = StorageUtil.GetIntValue(akVictim, KEY_ASSAULT_DAY, -1) == now as int
+	If asCrime == "assault"
+		If attackedToday
+			Return
+		EndIf
+		StorageUtil.SetIntValue(akVictim, KEY_ASSAULT_DAY, now as int)
+		StorageUtil.SetStringValue(akVictim, KEY_ASSAULT_ROW, id)
+	ElseIf attackedToday
+		replace = StorageUtil.GetStringValue(akVictim, KEY_ASSAULT_ROW)
+	EndIf
+	string row = "{\"id\":" + MLWW_Util.Quote(id) + ",\"crime\":\"" + asCrime + "\",\"day\":" + now + PlaceJson(akVictim, aiHold) \
+		+ ",\"victim\":{\"base\":\"" + MLWW_Util.BaseId(akVictim) + "\",\"ref_id\":\"" + ref + "\",\"name\":" \
+		+ MLWW_Util.Quote(akVictim.GetDisplayName()) + ",\"thalmor\":" + (MLWW_Util.IsThalmor(akVictim) as int) + "}" \
+		+ ",\"witnesses\":" + WitnessJson(akVictim) + ",\"by_player\":true,\"masked\":" + Masked() \
+		+ ",\"player\":" + MLWW_Util.Quote(MLWW_Util.PlayerName()) + "}"
+	AppendRow("crimes", row, replace)
+EndFunction
+
+; A named person who died, not by the player's hand (MLWW_Died only reports named people).
+Function LogDeath(Actor akDead)
+	If !akDead || akDead.IsChild()
+		Return
+	EndIf
+	float now = Utility.GetCurrentGameTime()
+	string ref = MLWW_Util.Hex(akDead.GetFormID(), 8)
+	string row = "{\"id\":\"death-" + ref + "-" + ((now * 1000.0) as int) + "\",\"base\":\"" + MLWW_Util.BaseId(akDead) \
+		+ "\",\"ref_id\":\"" + ref + "\",\"name\":" + MLWW_Util.Quote(akDead.GetDisplayName()) + ",\"day\":" + now \
+		+ PlaceJson(akDead, -1) + ",\"by_player\":false,\"unique\":true,\"witnesses\":" + WitnessJson(akDead) \
+		+ ",\"player\":" + MLWW_Util.Quote(MLWW_Util.PlayerName()) + "}"
+	AppendRow("deaths", row, "")
+EndFunction
+
+; ,"place":..,"town":..,"hold":.. for where akActor is: the location's name (else the cell's, as the battle record does),
+; the city, town or settlement it lies in, and its hold (else aiHold).
+string Function PlaceJson(Actor akActor, int aiHold)
+	Location here = akActor.GetCurrentLocation()
+	string place = ""
+	If here
+		place = here.GetName()
+	EndIf
+	If place == "" && akActor.GetParentCell()
+		place = akActor.GetParentCell().GetName()
+	EndIf
+	string town = ""
+	Keyword city = Game.GetFormFromFile(0x013168, "Skyrim.esm") as Keyword        ; LocTypeCity
+	Keyword townType = Game.GetFormFromFile(0x013166, "Skyrim.esm") as Keyword    ; LocTypeTown
+	Keyword settlement = Game.GetFormFromFile(0x013167, "Skyrim.esm") as Keyword  ; LocTypeSettlement
+	Location loc = here
+	int depth = 0
+	While loc && town == "" && depth < 8
+		If loc.HasKeyword(city) || loc.HasKeyword(townType) || loc.HasKeyword(settlement)
+			town = loc.GetName()
+		EndIf
+		loc = PO3_SKSEFunctions.GetParentLocation(loc)
+		depth += 1
+	EndWhile
+	string hold = ""
+	MLWW_State world = Game.GetFormFromFile(0x000800, "Mantella Living World - World.esp") as MLWW_State
+	If world
+		int h = world.HoldOfLocation(here)
+		If h < 0
+			h = aiHold
+		EndIf
+		hold = world.HoldName(h)
+	EndIf
+	Return ",\"place\":" + MLWW_Util.Quote(place) + ",\"town\":" + MLWW_Util.Quote(town) + ",\"hold\":" + MLWW_Util.Quote(hold)
+EndFunction
+
+; The people close to akAt (as SawThalmor: not the player's party), at most MAX_CRIME_WITNESSES, as a JSON array.
+string Function WitnessJson(Actor akAt)
+	ObjectReference[] near = PO3_SKSEFunctions.FindAllReferencesOfFormType(akAt, 62, WITNESS_RANGE)
+	Keyword npc = Keyword.GetKeyword("ActorTypeNPC")
+	string out = "["
+	int i = 0
+	int seen = 0
+	While near && i < near.Length && seen < MAX_CRIME_WITNESSES
+		Actor a = near[i] as Actor
+		If a && a != PlayerRef && a != akAt && !a.IsDead() && !InParty(a) && a.HasKeyword(npc)
+			If seen > 0
+				out += ","
+			EndIf
+			out += "{\"base\":\"" + MLWW_Util.BaseId(a) + "\",\"ref_id\":\"" + MLWW_Util.Hex(a.GetFormID(), 8) + "\""
+			If a.IsChild()
+				out += ",\"minor\":1}"
+			Else
+				out += ",\"name\":" + MLWW_Util.Quote(a.GetDisplayName()) + "}"
+			EndIf
+			seen += 1
+		EndIf
+		i += 1
+	EndWhile
+	Return out + "]"
+EndFunction
+
+; One of the player's followers: a teammate, or in the current follower faction (rank 0 or more; dismissed is -1),
+; which vanilla, NFF and the Followers module all use, also for a follower who is waiting or not set as a teammate.
+bool Function InParty(Actor akActor)
+	If akActor.IsPlayerTeammate()
+		Return true
+	EndIf
+	Faction current = Game.GetFormFromFile(0x05C84E, "Skyrim.esm") as Faction  ; CurrentFollowerFaction
+	Return current && akActor.GetFactionRank(current) >= 0
+EndFunction
+
+; 1 when a hood or helmet hides the player's face where that hides who they are: inside a hold where the player is not
+; famous (fame 3+) and not Thane, as MLWW_Recognition.Verdict decides; else 0.
+int Function Masked()
+	Armor head = PlayerRef.GetWornForm(0x00000001) as Armor
+	If !head
+		head = PlayerRef.GetWornForm(0x00000002) as Armor
+	EndIf
+	MLWW_State world = Game.GetFormFromFile(0x000800, "Mantella Living World - World.esp") as MLWW_State
+	If !head || !world
+		Return 0
+	EndIf
+	int hold = world.CurrentHold()
+	If hold < 0 || world.Fame(hold) >= 3 || world.IsThane(hold)
+		Return 0
+	EndIf
+	Return 1
+EndFunction
+
+; Adds asRow to the list (or puts it in place of the row with id asReplaceId among the last 20), drops the oldest rows
+; beyond MAX_CRIME_ROWS and saves. One writer at a time, as Relationships' marriages.json.
+Function AppendRow(string asList, string asRow, string asReplaceId)
+	int tries = 0
+	While crimeLogging && tries < 40
+		Utility.WaitMenuMode(0.1)
+		tries += 1
+	EndWhile
+	crimeLogging = true
+	string path = "." + asList
+	If !JsonUtil.IsPathArray(CRIMES_FILE, path)
+		JsonUtil.SetRawPathValue(CRIMES_FILE, path, "[]")
+	EndIf
+	int n = JsonUtil.PathCount(CRIMES_FILE, path)
+	If n < 0
+		n = 0
+	EndIf
+	int at = n
+	If asReplaceId != ""
+		int i = n - 1
+		While i >= 0 && i >= n - 20
+			If JsonUtil.GetPathStringValue(CRIMES_FILE, path + "[" + i + "].id") == asReplaceId
+				at = i
+				i = 0
+			EndIf
+			i -= 1
+		EndWhile
+	EndIf
+	If JsonUtil.SetRawPathValue(CRIMES_FILE, path + "[" + at + "]", asRow)
+		While JsonUtil.PathCount(CRIMES_FILE, path) > MAX_CRIME_ROWS
+			JsonUtil.ClearPathIndex(CRIMES_FILE, path, 0)
+		EndWhile
+		JsonUtil.SetRawPathValue(CRIMES_FILE, ".player", MLWW_Util.Quote(MLWW_Util.PlayerName()))
+		JsonUtil.Save(CRIMES_FILE)
+	EndIf
+	crimeLogging = false
+EndFunction
+
+; The people near akVictim (not the player's party) saw the player kill or attack this Thalmor. A killing is not
+; overwritten by a later attack on the same day.
+Function SawThalmor(Actor akVictim, bool abKilled)
+	float now = Utility.GetCurrentGameTime()
+	string victim = akVictim.GetDisplayName()
+	ObjectReference[] near = PO3_SKSEFunctions.FindAllReferencesOfFormType(akVictim, 62, WITNESS_RANGE)  ; not MiscUtil.ScanCellNPCs: VR
+	int i = 0
+	int seen = 0
+	Keyword npc = Keyword.GetKeyword("ActorTypeNPC")
+	While near && i < near.Length && seen < MAX_WITNESSES
+		Actor a = near[i] as Actor
+		If a && a != PlayerRef && a != akVictim && !a.IsDead() && !InParty(a) && a.HasKeyword(npc)
+			bool killedLately = StorageUtil.GetIntValue(a, KEY_THALMOR_KILLED) > 0 && now - StorageUtil.GetFloatValue(a, KEY_THALMOR, -9.0) < 1.0
+			If abKilled || !killedLately
+				StorageUtil.SetFloatValue(a, KEY_THALMOR, now)
+				StorageUtil.SetIntValue(a, KEY_THALMOR_KILLED, abKilled as int)
+				StorageUtil.SetStringValue(a, KEY_THALMOR_NAME, victim)
+			EndIf
+			seen += 1
+		EndIf
+		i += 1
+	EndWhile
+EndFunction
 
 Event OnWoken(string asEvent, string asText, float afHour, Form akSender)
 	If akSender
@@ -107,8 +350,24 @@ Event OnWoken(string asEvent, string asText, float afHour, Form akSender)
 EndEvent
 
 Event OnGift(string asName, string asItem, float afCount, Form akSender)
+	If TradeHandOver(akSender, asItem)
+		Return
+	EndIf
 	RecordGift(akSender, asItem, afCount as int, true)
 EndEvent
+
+; An item the player handed over through the Trade action (MLWW_Trade.AskItem marks it just before): a sale or a payment,
+; told to the talk by Trade itself, never scored or remembered as a gift. The mark is used once and lasts 10 seconds.
+bool Function TradeHandOver(Form akSender, string asItem)
+	If !akSender || StorageUtil.GetStringValue(akSender, "MLWW_TradeHanded", "") != asItem
+		Return false
+	EndIf
+	float at = StorageUtil.GetFloatValue(akSender, "MLWW_TradeHandedAt", -100.0)
+	float now = Utility.GetCurrentRealTime()
+	StorageUtil.UnsetStringValue(akSender, "MLWW_TradeHanded")
+	StorageUtil.UnsetFloatValue(akSender, "MLWW_TradeHandedAt")
+	Return now >= at && now - at < 10.0
+EndFunction
 
 ; Given through the gift menu: remembered the same, no score event (M.A.R.A.S scores its own gifts).
 Event OnGiftMenu(string asName, string asItem, float afCount, Form akSender)
@@ -313,12 +572,18 @@ EndFunction
 ; ---------------------------------------------------------------------------
 
 Event OnNpcAdded(Form akActor)
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Personal,OnNpcAdded_start,\n", true, false)
+	EndIf
 	Actor npc = akActor as Actor
 	If !npc || npc == PlayerRef || npc.IsDead()
 		Return
 	EndIf
 	MLWW_Facts.Sync(npc)
 	MLWW_Util.Send("personal", Line(npc))
+	If StorageUtil.GetIntValue(None, "MLW_TimingOn", 0) == 1  ; speed testing (off by default): one stage-time row
+		MiscUtil.WriteToFile("Data/SKSE/Plugins/StorageUtilData/MantellaLivingWorld/timing_game.csv", StorageUtil.GetIntValue(None, "MLW_TimingTalk", 0) + "," + Utility.GetCurrentRealTime() + ",MLWW_Personal,OnNpcAdded_end,\n", true, false)
+	EndIf
 EndEvent
 
 ; One line with what the player did to this NPC; "" when nothing matters now.
@@ -326,7 +591,7 @@ string Function Line(Actor akNpc)
 	float now = Utility.GetCurrentGameTime()
 	string player = MLWW_Util.PlayerName()
 	string name = akNpc.GetDisplayName()
-	string[] items = new string[8]
+	string[] items = new string[10]
 	int n = 0
 
 	Form caughtBy = CaughtKey(akNpc)
@@ -362,6 +627,16 @@ string Function Line(Actor akNpc)
 	bool hitFact = StorageUtil.GetIntValue(akNpc, "MLWW_HitByPlayer") > 0 && MLWW_Util.Hub()
 	If struck >= 0.0 && now - struck <= MEMORY_DAYS && !hitFact
 		items[n] = player + " struck " + name + " " + When(struck, now)
+		n += 1
+	EndIf
+
+	float sawThalmor = StorageUtil.GetFloatValue(akNpc, KEY_THALMOR, -1.0)
+	If sawThalmor >= 0.0 && now - sawThalmor <= THALMOR_DAYS
+		string verb = " attack "
+		If StorageUtil.GetIntValue(akNpc, KEY_THALMOR_KILLED) > 0
+			verb = " kill "
+		EndIf
+		items[n] = name + " saw " + player + verb + StorageUtil.GetStringValue(akNpc, KEY_THALMOR_NAME) + " " + When(sawThalmor, now) + " (" + MLWW_Util.ThalmorClause(akNpc) + ")"
 		n += 1
 	EndIf
 

@@ -121,6 +121,54 @@ ROWS
   note "event tests finished: $PASS passed, $FAIL failed"
   [ "$FAIL" -eq 0 ]; exit
 fi
+# T1-T5 trading by talk: SUITE=trade bash run-tests.sh. Calls the trade functions without their Yes/No boxes.
+#   FOLLOWER  a follower set as a teammate (default Lydia, 0xA2C94)   MERCHANT  default Belethor   Hod is the stranger
+if [ "${SUITE:-}" = trade ]; then
+  NPC=$(f "${FOLLOWER:-0xA2C94}"); SHOP=$(f "${MERCHANT:-0x1A672}")
+  t TStartTalk >/dev/null; sleep 1; t GiveGold '[1000]' >/dev/null
+  note "T1 who trades freely"
+  check "follower gives freely" "$(t TFree "[$NPC]")" "free=True"
+  check "Hod is a stranger" "$(t TFree "[$HOD]")" "free=False"
+  check "Belethor is a merchant" "$(t TFree "[$SHOP]")" "merchant=True"
+  note "T2 gold and the stranger rule"
+  check "stranger gives no free gold" "$(t TGiveGold "[$HOD,10]")" "^\(Nothing happened: .*given nothing yet"
+  g0=$(t Gold)
+  check "pay Hod 50" "$(t TAskGold "[$HOD,50]")" "handed .* 50 gold; it was handed over"
+  check "50 left the player" "$(( g0 - $(t Gold) ))" "^50$"
+  check "credit 50" "$(t TCredit "[$HOD]")" "^50$"
+  check "Hod pays back at most the credit" "$(t TGiveGold "[$HOD,60]")" "at most 50 gold"
+  check "Hod pays back 50" "$(t TGiveGold "[$HOD,50]")" "Hod handed .* 50 gold"
+  check "credit used up" "$(t TCredit "[$HOD]")" "^0$"
+  check "player cannot pay what they lack" "$(t TAskGold "[$HOD,99999999]")" "has only"
+  t TStartTalk >/dev/null; sleep 1
+  note "T3 items with a follower"
+  con "player.additem 1397E 2"; sleep 1
+  check "player hands the follower an Iron Dagger" "$(t TAskItem "[$NPC,\"iron dagger\",1]")" "handed .* Iron Dagger; it was handed over"
+  check "follower hands it back by a loose name" "$(t TGiveItem "[$NPC,\"a rusty dagger\",1]")" "Iron Dagger; it was handed over"
+  check "an item nobody carries is refused" "$(t TGiveItem "[$NPC,\"dragon egg\",1]")" "carries nothing called"
+  check "follower gold is theirs to give" "$(t TGiveGold "[$NPC,1]")" "handed|carries only"
+  note "T4 merchant offer"
+  carry=$(t TCarry "[$SHOP]")
+  check "carry written with stock" "$carry" "^[0-9]+\|.*\|1\|.+ gold"
+  ware=$(printf '%s' "$carry" | awk -F'|' '{print $4}' | sed 's/,.*//; s/ [0-9]* gold$//; s/^[0-9]* //')
+  echo "   ware: $ware"
+  g0=$(t Gold)
+  check "too low a price is raised to half the shop price" "$(t TOffer "[$SHOP,\"$ware\",1,1]")" "price was raised"
+  check "the gold left the player" "$(( g0 - $(t Gold) > 0 ))" "^1$"
+  check "a non-merchant cannot offer" "$(t TOffer "[$HOD,\"$ware\",1,10]")" "is no merchant"
+  note "T6 the one Trade action dispatches on kind"
+  con "player.additem 1397E 1"; sleep 1
+  check "player hands the follower a dagger to give back" "$(t TAskItem "[$NPC,\"iron dagger\",1]")" "it was handed over"
+  check "Trade give_item" "$(t TTrade "[$NPC,\"give_item\",\"iron dagger\",0,1,0]")" "Iron Dagger; it was handed over"
+  check "Trade give_gold" "$(t TTrade "[$NPC,\"give_gold\",\"\",1,0,0]")" "handed|carries only"
+  check "Trade with an unknown kind is refused" "$(t TTrade "[$NPC,\"juggle\",\"\",0,0,0]")" "which kind of trade"
+  check "Trade item kind with no item is refused" "$(t TTrade "[$NPC,\"give_item\",\"\",0,1,0]")" "no item was named"
+  check "Trade offer_trade by a non-merchant is refused" "$(t TTrade "[$HOD,\"offer_trade\",\"bread\",0,1,5]")" "is no merchant"
+  note "T5 results reach the talk"
+  check "last event line is the trade result" "$(t LastSent)" "^trade: \("
+  note "trade tests finished: $PASS passed, $FAIL failed"
+  [ "$FAIL" -eq 0 ]; exit
+fi
 note "setup"
 check "quests running" "$(t Status)" "state=true meetings=true recognition=true pairs=true crime=true"
 t Reload >/dev/null; sleep 3  # re-registers five quests; can outlast DevBench's 3 s reply limit

@@ -1,0 +1,57 @@
+{
+    "identifier": "mantella_mlww_trade",
+    "name": "Trade",
+    "description": "Moves real gold or goods: a merchant sells a ware the player asks to buy by name with offer_trade, at the shop price unless another was agreed (Barter only opens the shop menu to browse); a stranger pays only for what the player handed over first.",
+    "note": "Needs Mantella Living World - World and Advanced Actions on in Mantella (it names the amount or the item). Followers, friends and lovers give and take freely; a stranger hands over gold or goods only as payment for what you handed them in the same talk. Anything you hand over asks you Yes/No first. offer_trade is for merchants only.",
+    "key": "Trade",
+    "enabled": true,
+    "parameters": {
+        "kind": {
+            "type": "string",
+            "enum": [
+                "give_gold",
+                "ask_gold",
+                "give_item",
+                "ask_item",
+                "offer_trade",
+                "take_gift"
+            ],
+            "description": "give_*: you hand over what you carry; ask_*: the player hands it to you; offer_trade: a merchant sells a ware asked for from the shop; take_gift: opens the gift menu."
+        },
+        "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Gold, for give_gold and ask_gold."
+        },
+        "item": {
+            "type": "string",
+            "description": "Item name, for the item kinds."
+        },
+        "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "How many; default 1."
+        },
+        "price": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "offer_trade: the agreed gold for all of it; leave out for the shop price."
+        }
+    },
+    "required": [
+        "kind"
+    ],
+    "prompt": "When the player wants to give you something, begin your response with '{key}:'",
+    "allowed_games": [
+        "skyrim"
+    ],
+    "requires_response": true,
+    "is-interrupting": false,
+    "allow_repeat": true,
+    "one-on-one": true,
+    "multi-npc": true,
+    "radiant": false
+}
