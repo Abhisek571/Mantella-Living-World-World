@@ -2,7 +2,7 @@
 
 Every change to Mantella Living World - World. The Nexus page lists only the main changes for each version.
 
-## Unreleased
+## 1.2.1 (2026-11-18)
 
 ### New
 - Ordinary dialogue with an NPC (the topics you pick in the game's dialogue menu and their answers, from any mod) is kept from the moment the game loads, also before Mantella's first conversation, so that NPC's next talk knows it. Nothing expires: the lines wait (with the day, the place and the mod they come from) until that NPC's next talk turns them into memories, however much later. Up to 60 exchanges per NPC and 200 NPCs; when an NPC's store is full, a base game line goes first. Needs the Integration Hub.
