@@ -28,29 +28,36 @@ STATE = QUESTS[0][0]
 
 def write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    open(path, 'w', encoding='utf-8', newline='\n').write(text)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
 
 
-for fid, eid, script, name, needs_state in QUESTS:
+def script_property(name, form_key):
+    return f'    - MutagenObjectType: ScriptObjectProperty\n      Name: {name}\n      Object: {form_key}\n'
+
+
+def quest_yaml(fid, eid, script, name, needs_state):
     alias = 'MLWW_BanterAlias' if script == 'MLWW_Banter' else 'MLWW_PlayerAlias'  # only banter needs OnHit
-    props = '    - MutagenObjectType: ScriptObjectProperty\n      Name: PlayerRef\n      Object: 000014:Skyrim.esm\n'
+    props = script_property('PlayerRef', '000014:Skyrim.esm')
     if needs_state:
-        props += f'    - MutagenObjectType: ScriptObjectProperty\n      Name: World\n      Object: {STATE}:{E}\n'
-    for gfid, gname, _, _, user in GLOBALS:
-        if user == script:
-            props += f'    - MutagenObjectType: ScriptObjectProperty\n      Name: {gname}\n      Object: {gfid}:{E}\n'
-    write(f'esp/Quests/{eid} - {fid}_{E}.yaml',
-          f"FormKey: {fid}:{E}\nEditorID: {eid}\nVirtualMachineAdapter:\n  Scripts:\n  - Name: {script}\n    Properties:\n{props}"
-          f"  FileName: ''\n  Aliases:\n  - Property:\n      Name: ''\n      Object: {fid}:{E}\n      Alias: 0\n"
-          f"    Scripts:\n    - Name: {alias}\n"
-          f"Name:\n  TargetLanguage: English\n  Value: {name}\nFlags:\n- StartGameEnabled\nNextAliasID: 1\n"
-          f"Aliases:\n- Name: PlayerAlias\n  Flags: []\n  ForcedReference: 000014:Skyrim.esm\n  VoiceTypes: Null\n")
-for gfid, gname, typ, val, _ in GLOBALS:
-    write(f'esp/Globals/{gname} - {gfid}_{E}.yaml', f'MutagenObjectType: {typ}\nFormKey: {gfid}:{E}\nEditorID: {gname}\nData: {val}\n')
-write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n  Flags:\n  - Small\n  Author: itsPigeon2000\n'
-      '  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk, what the player did to each NPC, battle accounts, trading by talk.\n'
-      '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n')
-write('esp/spriggit-meta.json', json.dumps({'PackageName': 'Spriggit.Yaml.Skyrim', 'Version': '0.40.0', 'Release': 'SkyrimSE', 'ModKey': E}, indent=2))
+        props += script_property('World', f'{STATE}:{E}')
+    props += ''.join(script_property(gname, f'{gfid}:{E}') for gfid, gname, _, _, user in GLOBALS if user == script)
+    return (f"FormKey: {fid}:{E}\nEditorID: {eid}\nVirtualMachineAdapter:\n  Scripts:\n  - Name: {script}\n    Properties:\n{props}"
+            f"  FileName: ''\n  Aliases:\n  - Property:\n      Name: ''\n      Object: {fid}:{E}\n      Alias: 0\n"
+            f"    Scripts:\n    - Name: {alias}\n"
+            f"Name:\n  TargetLanguage: English\n  Value: {name}\nFlags:\n- StartGameEnabled\nNextAliasID: 1\n"
+            f"Aliases:\n- Name: PlayerAlias\n  Flags: []\n  ForcedReference: 000014:Skyrim.esm\n  VoiceTypes: Null\n")
+
+
+def write_plugin():
+    for fid, eid, script, name, needs_state in QUESTS:
+        write(f'esp/Quests/{eid} - {fid}_{E}.yaml', quest_yaml(fid, eid, script, name, needs_state))
+    for gfid, gname, typ, val, _ in GLOBALS:
+        write(f'esp/Globals/{gname} - {gfid}_{E}.yaml', f'MutagenObjectType: {typ}\nFormKey: {gfid}:{E}\nEditorID: {gname}\nData: {val}\n')
+    write('esp/RecordData.yaml', f'ModKey: {E}\nGameRelease: SkyrimSE\nModHeader:\n  Flags:\n  - Small\n  Author: itsPigeon2000\n'
+          '  Description: Mantella Living World - World. Fame, crime, war side, quest outcomes, since we last met, hiding, who knows whom, settle crime, banter, NPCs who come to talk, what the player did to each NPC, battle accounts, trading by talk.\n'
+          '  MasterReferences:\n  - Master: Skyrim.esm\n    FileSize: 0\n')
+    write('esp/spriggit-meta.json', json.dumps({'PackageName': 'Spriggit.Yaml.Skyrim', 'Version': '0.40.0', 'Release': 'SkyrimSE', 'ModKey': E}, indent=2))
 
 SETTLE_NOTE = "Needs Mantella Living World - World. Guards, stewards and Jarls only. Every way of settling asks you Yes/No first (letting a bounty go hands over any stolen goods). Bribe and persuade need Advanced Actions on in Mantella. Keep Mantella's own AbsolveCrime off."
 REPORT_NOTE = "Needs Mantella Living World - World and Advanced Actions on in Mantella. Guards, stewards and Jarls only. A guard adds a bounty only when another NPC (not one of your followers) is present as a witness, once per crime per talk and at most the vanilla bounty per crime per hold each day. This is a separate action from Mantella's own ReportCrime, which you can keep off."
@@ -94,15 +101,29 @@ ACTIONS = [
      # Without arguments (Advanced Actions off) only the gift menu can be opened, as TakeGift did.
      'prompt': "When the player wants to give you something, begin your response with '{key}:'"},
 ]
-for a in ACTIONS:
-    data = {'identifier': a['identifier'], 'name': a['name'], 'description': a['description'], 'note': a['note'], 'key': a['name'],
-            'enabled': True}
-    if a.get('lw_gate'):
-        data['lw_gate'] = a['lw_gate']
-    data.update({'parameters': a['parameters'], 'required': a['required'], 'prompt': a['prompt'],
+# trades may follow each other (two items, a lower amount after a refusal); a crime is settled or reported once
+NO_REPEAT = {'mantella_mlww_settle_crime', 'mantella_mlww_report_crime'}
+
+
+def action_json(action):
+    """One Mantella action file's content."""
+    data = {'identifier': action['identifier'], 'name': action['name'], 'description': action['description'],
+            'note': action['note'], 'key': action['name'], 'enabled': True}
+    if action.get('lw_gate'):
+        data['lw_gate'] = action['lw_gate']
+    data.update({'parameters': action['parameters'], 'required': action['required'], 'prompt': action['prompt'],
                  'allowed_games': ['skyrim'], 'requires_response': True, 'is-interrupting': False,
-                 # trades may follow each other (two items, a lower amount after a refusal)
-                 'allow_repeat': a['identifier'] not in ('mantella_mlww_settle_crime', 'mantella_mlww_report_crime'),
-                 'one-on-one': a.get('one-on-one', True), 'multi-npc': True, 'radiant': False})
-    write(f"SKSE/Plugins/MantellaSoftware/data/actions/{a['identifier']}.json", json.dumps(data, indent=4) + '\n')
-print('world records written:', len(QUESTS), 'quests,', len(ACTIONS), 'actions')
+                 'allow_repeat': action['identifier'] not in NO_REPEAT,
+                 'one-on-one': action.get('one-on-one', True), 'multi-npc': True, 'radiant': False})
+    return json.dumps(data, indent=4) + '\n'
+
+
+def main():
+    write_plugin()
+    for action in ACTIONS:
+        write(f"SKSE/Plugins/MantellaSoftware/data/actions/{action['identifier']}.json", action_json(action))
+    print('world records written:', len(QUESTS), 'quests,', len(ACTIONS), 'actions')
+
+
+if __name__ == '__main__':
+    main()

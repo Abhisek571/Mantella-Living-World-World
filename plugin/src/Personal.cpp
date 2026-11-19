@@ -362,59 +362,60 @@ namespace MLWW::Personal
 			}
 		}
 
-		void OnMenu(std::string_view a_menu, bool a_opening)
+		// Follower inventory closed: gold moved in and out while it was open counts once, as the net.
+		void SendFollowerGoldGift()
 		{
-			auto* player = Player();
-			if (!player) {
-				return;
+			auto follower = g_tradeTarget.get();
+			g_tradeTarget.reset();
+			const std::int32_t given = follower && !follower->IsDead() ? GoldOf(follower.get()) - g_tradeGold : 0;
+			if (given > 0) {
+				SendModEvent("MLWW_Gift", "Gold", static_cast<float>(given), follower.get());
+				logger::info("gift to {:08X}: Gold x{} (net over the inventory window)", follower->GetFormID(), given);
 			}
-			if (a_menu == RE::ContainerMenu::MENU_NAME) {
-				const auto mode = RE::ContainerMenu::GetContainerMode();
-				if (a_opening && mode == RE::ContainerMenu::ContainerMode::kPickpocket) {
-					auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
-					auto* actor = target ? target->As<RE::Actor>() : nullptr;
-					g_pickpocketTarget = actor ? actor->GetHandle() : RE::ActorHandle{};
-					g_pickpocketUntil = Clock::time_point::max() - kCaughtWindow;
-					logger::info("pickpocket menu on {:08X}", actor ? actor->GetFormID() : 0);
-				} else if (a_opening && mode == RE::ContainerMenu::ContainerMode::kNPCMode) {
-					// A follower's inventory: gold moved in and out while it is open counts once, as the net, on close.
-					auto  target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
-					auto* actor = LiveActor(target.get());
-					g_tradeTarget = actor && actor->IsPlayerTeammate() ? actor->GetHandle() : RE::ActorHandle{};
-					g_tradeGold = actor ? GoldOf(actor) : 0;
-				} else if (!a_opening && PickpocketActive()) {  // only the pickpocket menu itself; any other container keeps the old window
-					g_pickpocketUntil = Clock::now();  // a failed pickpocket closes the menu; the bounty may land just after
-				}
-				if (!a_opening) {
-					auto follower = g_tradeTarget.get();
-					g_tradeTarget.reset();
-					const std::int32_t given = follower && !follower->IsDead() ? GoldOf(follower.get()) - g_tradeGold : 0;
-					if (given > 0) {
-						SendModEvent("MLWW_Gift", "Gold", static_cast<float>(given), follower.get());
-						logger::info("gift to {:08X}: Gold x{} (net over the inventory window)", follower->GetFormID(), given);
-					}
-				}
-				return;
-			}
-			if (a_menu != RE::BarterMenu::MENU_NAME) {
-				return;
-			}
-			if (a_opening) {
-				auto target = RE::TESObjectREFR::LookupByHandle(RE::BarterMenu::GetTargetRefHandle());
+		}
+
+		void OnContainerMenu(bool a_opening)
+		{
+			const auto mode = RE::ContainerMenu::GetContainerMode();
+			if (a_opening && mode == RE::ContainerMenu::ContainerMode::kPickpocket) {
+				auto target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
 				auto* actor = target ? target->As<RE::Actor>() : nullptr;
-				g_barterTarget = actor ? actor->GetHandle() : RE::ActorHandle{};
-				g_barterGold = GoldOf(player);
-				g_barterSold.clear();
-				g_barterSpent = 0;
-				g_barterEarned = 0;
-				return;
+				g_pickpocketTarget = actor ? actor->GetHandle() : RE::ActorHandle{};
+				g_pickpocketUntil = Clock::time_point::max() - kCaughtWindow;
+				logger::info("pickpocket menu on {:08X}", actor ? actor->GetFormID() : 0);
+			} else if (a_opening && mode == RE::ContainerMenu::ContainerMode::kNPCMode) {
+				// A follower's inventory: gold moved in and out while it is open counts once, as the net, on close.
+				auto  target = RE::TESObjectREFR::LookupByHandle(RE::ContainerMenu::GetTargetRefHandle());
+				auto* actor = LiveActor(target.get());
+				g_tradeTarget = actor && actor->IsPlayerTeammate() ? actor->GetHandle() : RE::ActorHandle{};
+				g_tradeGold = actor ? GoldOf(actor) : 0;
+			} else if (!a_opening && PickpocketActive()) {  // only the pickpocket menu itself; any other container keeps the old window
+				g_pickpocketUntil = Clock::now();  // a failed pickpocket closes the menu; the bounty may land just after
 			}
+			if (!a_opening) {
+				SendFollowerGoldGift();
+			}
+		}
+
+		void OnBarterOpened(RE::PlayerCharacter* a_player)
+		{
+			auto target = RE::TESObjectREFR::LookupByHandle(RE::BarterMenu::GetTargetRefHandle());
+			auto* actor = target ? target->As<RE::Actor>() : nullptr;
+			g_barterTarget = actor ? actor->GetHandle() : RE::ActorHandle{};
+			g_barterGold = GoldOf(a_player);
+			g_barterSold.clear();
+			g_barterSpent = 0;
+			g_barterEarned = 0;
+		}
+
+		void OnBarterClosed(RE::PlayerCharacter* a_player)
+		{
 			auto merchant = g_barterTarget.get();
 			g_barterTarget.reset();
 			if (!merchant) {
 				return;
 			}
-			const std::int32_t delta = GoldOf(player) - g_barterGold;  // above 0: the player sold
+			const std::int32_t delta = GoldOf(a_player) - g_barterGold;  // above 0: the player sold
 			const std::int32_t chest = ChestGold(merchant.get());
 			// Both directions: selling 4,000 and buying 4,200 in one menu is not "bought 200". When no gold move was
 			// seen, the net change stands for the one direction it shows.
@@ -432,6 +433,23 @@ namespace MLWW::Personal
 			}
 			if (auto most = std::ranges::max_element(g_barterSold, {}, [](const auto& a_sold) { return a_sold.second; }); most != g_barterSold.end()) {
 				SendModEvent("MLWW_TradeGoods", most->first, static_cast<float>(most->second), merchant.get());
+			}
+		}
+
+		void OnMenu(std::string_view a_menu, bool a_opening)
+		{
+			auto* player = Player();
+			if (!player) {
+				return;
+			}
+			if (a_menu == RE::ContainerMenu::MENU_NAME) {
+				OnContainerMenu(a_opening);
+			} else if (a_menu == RE::BarterMenu::MENU_NAME) {
+				if (a_opening) {
+					OnBarterOpened(player);
+				} else {
+					OnBarterClosed(player);
+				}
 			}
 		}
 

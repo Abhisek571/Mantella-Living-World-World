@@ -618,59 +618,85 @@ class Papyrus:
         if self.stale:
             self.queue(None)
 
-    # Records: MLWW_Personal.psc:63-234
+    # Records: MLWW_Personal.psc:63-234. Counted events: name -> (key when the player did it, key when the NPC did, day key)
+    COUNTED = {
+        'MLWW_Healed': ('MLWW_HealedByPlayer', 'MLWW_HealedPlayer', 'MLWW_HealedDay'),
+        'MLWW_Saved': ('MLWW_SavedByPlayer', 'MLWW_SavedPlayer', 'MLWW_SavedDay'),
+        'MLWW_FriendlyFire': ('MLWW_HitByPlayer', 'MLWW_HitPlayer', 'MLWW_HitDay'),
+        'MLWW_Fought': ('MLWW_Fought', 'MLWW_Fought', 'MLWW_FoughtDay'),
+        'MLWW_Defended': ('MLWW_Defended', 'MLWW_Defended', 'MLWW_DefendedDay'),
+    }
+    HANDLERS = {  # name -> method taking (sender, text, num)
+        'MLWW_Died': 'on_died', 'MLWW_Murder': 'on_murder', 'MLWW_Struck': 'on_struck', 'MLWW_Woken': 'on_woken',
+        'MLWW_Gift': 'on_gift', 'MLWW_GiftMenu': 'on_gift_menu', 'MLWW_Trade': 'on_trade', 'MLWW_Caught': 'on_caught',
+        'MLWW_TradeGoods': 'on_trade_goods', 'MLWW_Kill': 'on_kill',
+    }
+
     def handle(self, name, text, num, sender):
-        w = self.sim.world
-        a = w.actors.get(sender) if isinstance(sender, int) else None
-        if name == 'MLWW_Died':
-            self.si(sender, 'MLWW_DiedDay', w.game_hours / 24); self.si(sender, 'MLWW_DiedByPlayer', int(num))
-            if num > 0 and 'murder_victim' not in self.sim.fix:  # the old OnDied stamped every unique the player killed
-                self.si(None, 'MLWW_LastMurderDay', w.game_hours / 24)
-                self.sim.check_murder_stamp(sender)
-        elif name == 'MLWW_Murder':  # MLWW_Personal.OnMurder
-            self.si(None, 'MLWW_LastMurderDay', w.game_hours / 24)
-            self.sim.check_murder_stamp(sender)
-        elif name == 'MLWW_Struck':
-            self.si(sender, 'MLWW_StruckDay', w.game_hours / 24)
-        elif name == 'MLWW_Woken':
-            self.si(sender, 'MLWW_WokenAt', w.game_hours / 24); self.si(sender, 'MLWW_WokenHour', num)
-        elif name in ('MLWW_Gift', 'MLWW_GiftMenu'):
-            self.record_gift(sender, text, int(num), name == 'MLWW_Gift')
-        elif name == 'MLWW_Trade':
-            self.on_trade(sender, text, num)
-        elif name == 'MLWW_Caught':  # CaughtKey: an owner base, a named NPC's base, else the actor itself
-            key = ('base', sender[1]) if isinstance(sender, tuple) else (('base', a.base) if a and a.unique else sender)
-            self.si(key, 'MLWW_CaughtDay', w.game_hours / 24); self.si(key, 'MLWW_CaughtKind', text)
-        elif name == 'MLWW_TradeGoods':
-            if text:
-                self.goods(sender, text, int(num)); self.queue(sender)
-        elif name == 'MLWW_Healed':
-            self.count(sender, 'MLWW_HealedByPlayer' if num > 0 else 'MLWW_HealedPlayer', 'MLWW_HealedDay')
-            if num > 0:
-                self.sim.scores.append((sender, 'care'))
-            self.queue(sender)
-        elif name == 'MLWW_Saved':
-            self.count(sender, 'MLWW_SavedByPlayer' if num > 0 else 'MLWW_SavedPlayer', 'MLWW_SavedDay')
-            self.queue(sender)
-        elif name == 'MLWW_Kill':  # MLWW_Personal.psc:193-203
-            score = int(num)
-            self.best(None, text, score)
-            for m in self.sim.plugin.party_now():
-                self.calls += 1
-                if m.waiting:
-                    self.sim.violate('waiting_credited', f'{m.name} was waiting elsewhere but got a kill')
-                if m.fid == sender:
-                    self.adj(m.fid, 'MLWW_KillsOwn', 1)
-                elif sender == PLAYER:
-                    self.adj(m.fid, 'MLWW_KillsPlayer', 1)
-                self.best(m.fid, text, score)
-                self.queue(m.fid)
-        elif name == 'MLWW_FriendlyFire':
-            self.count(sender, 'MLWW_HitByPlayer' if num > 0 else 'MLWW_HitPlayer', 'MLWW_HitDay'); self.queue(sender)
-        elif name == 'MLWW_Fought':
-            self.count(sender, 'MLWW_Fought', 'MLWW_FoughtDay'); self.queue(sender)
-        elif name == 'MLWW_Defended':
-            self.count(sender, 'MLWW_Defended', 'MLWW_DefendedDay'); self.queue(sender)
+        if name in self.COUNTED:
+            self.on_counted(name, sender, num)
+            return
+        method = self.HANDLERS.get(name)
+        if method:
+            getattr(self, method)(sender, text, num)
+
+    def day_now(self):
+        return self.sim.world.game_hours / 24
+
+    def on_died(self, sender, text, num):
+        self.si(sender, 'MLWW_DiedDay', self.day_now()); self.si(sender, 'MLWW_DiedByPlayer', int(num))
+        if num > 0 and 'murder_victim' not in self.sim.fix:  # the old OnDied stamped every unique the player killed
+            self.on_murder(sender, text, num)
+
+    def on_murder(self, sender, text, num):  # MLWW_Personal.OnMurder
+        self.si(None, 'MLWW_LastMurderDay', self.day_now())
+        self.sim.check_murder_stamp(sender)
+
+    def on_struck(self, sender, text, num):
+        self.si(sender, 'MLWW_StruckDay', self.day_now())
+
+    def on_woken(self, sender, text, num):
+        self.si(sender, 'MLWW_WokenAt', self.day_now()); self.si(sender, 'MLWW_WokenHour', num)
+
+    def on_gift(self, sender, text, num):
+        self.record_gift(sender, text, int(num), True)
+
+    def on_gift_menu(self, sender, text, num):
+        self.record_gift(sender, text, int(num), False)
+
+    def on_caught(self, sender, text, num):  # CaughtKey: an owner base, a named NPC's base, else the actor itself
+        if isinstance(sender, tuple):
+            key = ('base', sender[1])
+        else:
+            actor = self.sim.world.actors.get(sender) if isinstance(sender, int) else None
+            key = ('base', actor.base) if actor and actor.unique else sender
+        self.si(key, 'MLWW_CaughtDay', self.day_now()); self.si(key, 'MLWW_CaughtKind', text)
+
+    def on_trade_goods(self, sender, text, num):
+        if not text:
+            return
+        self.goods(sender, text, int(num)); self.queue(sender)
+
+    def on_counted(self, name, sender, num):
+        by_player_key, by_npc_key, day_key = self.COUNTED[name]
+        self.count(sender, by_player_key if num > 0 else by_npc_key, day_key)
+        if name == 'MLWW_Healed' and num > 0:
+            self.sim.scores.append((sender, 'care'))
+        self.queue(sender)
+
+    def on_kill(self, sender, text, num):  # MLWW_Personal.psc:193-203
+        score = int(num)
+        self.best(None, text, score)
+        for member in self.sim.plugin.party_now():
+            self.calls += 1
+            if member.waiting:
+                self.sim.violate('waiting_credited', f'{member.name} was waiting elsewhere but got a kill')
+            if member.fid == sender:
+                self.adj(member.fid, 'MLWW_KillsOwn', 1)
+            elif sender == PLAYER:
+                self.adj(member.fid, 'MLWW_KillsPlayer', 1)
+            self.best(member.fid, text, score)
+            self.queue(member.fid)
 
     def record_gift(self, form, item, count, score):  # MLWW_Personal.psc:92-116
         if not item:

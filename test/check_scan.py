@@ -20,15 +20,11 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import checklib  # noqa: E402
+from checklib import check  # noqa: E402
 PSC = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_State.psc'), encoding='utf-8').read()
 CPP = open(os.path.join(ROOT, 'plugin', 'src', 'Personal.cpp'), encoding='utf-8').read()
-fails = 0
-
-
-def check(name, ok, detail=''):
-    global fails
-    print(('PASS ' if ok else 'FAIL ') + name + ('' if ok else f': {detail}'))
-    fails += not ok
 
 
 def code(text):
@@ -540,5 +536,5 @@ scenario_triggers()
 scenario_pending()
 scenario_not_ready()
 
-print(f'{"FAILED" if fails else "OK"}: {fails} failure(s)')
-sys.exit(1 if fails else 0)
+print(f'{"FAILED" if checklib.fails else "OK"}: {checklib.fails} failure(s)')
+sys.exit(1 if checklib.fails else 0)
