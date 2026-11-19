@@ -173,6 +173,41 @@ def test_folder_with_glob_characters():
     assert B.load_qjo([dst])[('skyrim.esm', 'ms13')]['hold'] == 'Whiterun'
 
 
+def test_broken_quest_file_is_skipped():
+    root = fake_qjo({'MS13': 'whiterunHold'})
+    with open(os.path.join(root, 'interface', 'quests', 'broken.json'), 'w', encoding='utf-8') as f:
+        f.write('{not json')
+    qjo = B.load_qjo([root])
+    assert qjo[('skyrim.esm', 'ms13')]['hold'] == 'Whiterun'
+
+
+def test_non_dict_entries_are_skipped():
+    root = tempfile.mkdtemp()
+    quests = os.path.join(root, 'interface', 'quests')
+    os.makedirs(quests)
+    with open(os.path.join(quests, 'odd.json'), 'w', encoding='utf-8') as f:
+        json.dump({'Skyrim.esm': {'MS13': 'whiterunHold', 'MS08': {'location': 'WhiterunHold', 'type': 7}},
+                   'Other.esp': ['not', 'a', 'dict']}, f)
+    qjo = B.load_qjo([root])
+    assert ('skyrim.esm', 'ms13') not in qjo
+    assert qjo[('skyrim.esm', 'ms08')] == {'hold': 'Whiterun', 'type': 7}
+    assert qjo['_mapping'] == {'main': [], 'faction': []}  # no mapping file: the empty default
+
+
+def test_broken_mapping_keeps_the_default():
+    root = fake_qjo({'MS13': 'whiterunHold'})
+    with open(os.path.join(root, 'interface', 'quests', 'categories', 'mapping.json'), 'w', encoding='utf-8') as f:
+        f.write('[broken')
+    assert B.load_qjo([root])['_mapping'] == {'main': [], 'faction': []}
+
+
+def test_optional_keys_only_when_given():
+    by_id = {r['id']: r for r in built()['rows']}
+    assert 'sets' not in by_id['mq103_dragonstone'] and 'supersedes' not in by_id['mq103_dragonstone']
+    keys = list(by_id['cw_finale_legion'])
+    assert keys[-2:] == ['requires', 'supersedes']  # written after the fixed keys, in a stable order
+
+
 def test_real_qjo_if_installed():
     roots = [r for r in B.DEFAULT_QJO if os.path.isdir(r)]
     if not roots:

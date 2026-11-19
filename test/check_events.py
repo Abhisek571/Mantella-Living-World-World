@@ -18,6 +18,9 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import checklib  # noqa: E402
+from checklib import check, warn  # noqa: E402
 CODING = os.path.dirname(ROOT)
 CPP_PATH = os.path.join(ROOT, 'plugin', 'src', 'Personal.cpp')
 CPP = open(CPP_PATH, encoding='utf-8').read()
@@ -25,20 +28,6 @@ SCRIPTS = os.path.join(ROOT, 'Source', 'Scripts')
 PSC = {f: open(os.path.join(SCRIPTS, f), encoding='utf-8').read() for f in os.listdir(SCRIPTS) if f.endswith('.psc')}
 FACTS = PSC['MLWW_Facts.psc']
 DATA = os.path.join(ROOT, 'SKSE', 'Plugins', 'StorageUtilData', 'MantellaLivingWorld')
-fails = 0
-warns = 0
-
-
-def check(name, ok, detail=''):
-    global fails
-    print(('PASS ' if ok else 'FAIL ') + name + ('' if ok else f': {detail}'))
-    fails += not ok
-
-
-def warn(name, detail):
-    global warns
-    print(f'WARN {name}: {detail}')
-    warns += 1
 
 
 handled = set(re.findall(r'RegisterForModEvent\("([^"]+)"', ''.join(PSC.values())))
@@ -379,22 +368,25 @@ def resolve_key(key, p, before, func, files, fname):
     if local:
         return resolve_key(local[-1].strip(), p, '', None, files, fname)
     if func is not None:  # a parameter: the keys every caller passes
-        params = [x.split()[-1] for x in func.group(2).split(',') if x.strip()]
         params = [x.split('=')[0].strip() for x in func.group(2).split(',') if x.strip()]
         names = [x.split()[-1] for x in params]
         if key in names:
-            idx = names.index(key)
-            out = []
-            script = fname[:-4]
-            for other, text in files.items():
-                code = papyrus_code(text)
-                pat = (re.escape(script) + r'\.' if other != fname else r'(?<!Function )(?<![\w.])(?:' + re.escape(script) + r'\.)?') + re.escape(func.group(1)) + r'\('
-                for c in re.finditer(pat, code):
-                    a = args_of(code, c.end() - 1)
-                    if idx < len(a):
-                        out += resolve_key(a[idx].strip(), {**props(text)}, code[:c.start()], None, files, other)
-            return out or [f'?{key}']
+            return caller_keys(func.group(1), names.index(key), files, fname) or [f'?{key}']
     return [f'?{key}']
+
+
+def caller_keys(func_name, idx, files, fname):
+    """The keys every call of func_name (defined in fname) passes as its argument number idx."""
+    out = []
+    script = fname[:-4]
+    for other, text in files.items():
+        code = papyrus_code(text)
+        qualifier = re.escape(script) + r'\.' if other != fname else r'(?<!Function )(?<![\w.])(?:' + re.escape(script) + r'\.)?'
+        for call in re.finditer(qualifier + re.escape(func_name) + r'\(', code):
+            args = args_of(code, call.end() - 1)
+            if idx < len(args):
+                out += resolve_key(args[idx].strip(), props(text), code[:call.start()], None, files, other)
+    return out
 
 
 world_uses = storage_uses(PSC, 'World')
@@ -844,5 +836,5 @@ check('Listener: the chosen menu entry is used only when found by address in the
       'a_topics->dialogueList' in choice and 'a_topics->dialogueListStack' in choice and 'entry == chosen' in choice
       and '->parentTopic' not in choice and 'ListedChoice(a_topics)' in LISTENER
       and 'a_topics->lastSelectedDialogue; chosen &&' not in LISTENER, choice[:300])
-print(f'{fails} failed, {warns} warnings')
-sys.exit(1 if fails else 0)
+print(f'{checklib.fails} failed, {checklib.warns} warnings')
+sys.exit(1 if checklib.fails else 0)

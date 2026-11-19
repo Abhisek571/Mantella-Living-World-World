@@ -18,6 +18,9 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import checklib  # noqa: E402
+from checklib import check  # noqa: E402
 CODING = os.path.dirname(ROOT)
 HUB = os.path.join(CODING, 'Mantella-Living-World-Hub')
 TRADE = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Trade.psc'), encoding='utf-8').read()
@@ -27,13 +30,6 @@ ACTIONS = os.path.join(ROOT, 'SKSE', 'Plugins', 'MantellaSoftware', 'data', 'act
 STOCK = {'AbsolveCrime', 'AddToConversation', 'Attack', 'Barter', 'Brawl', 'CancelTravel', 'CastSpell', 'CheckDirections',
          'CollectIngredients', 'Emote', 'EndConversation', 'Flee', 'Follow', 'Inventory', 'LeadTo', 'Listen', 'Look', 'Loot',
          'MoveTo', 'ReportCrime', 'ShareConversation', 'StandDown', 'Teleport', 'TravelTo', 'Unfollow', 'Wait'}
-fails = 0
-
-
-def check(name, ok, detail=''):
-    global fails
-    print(('PASS ' if ok else 'FAIL ') + name + ('' if ok else f': {detail}'))
-    fails += not ok
 
 
 def code(text):
@@ -524,5 +520,5 @@ on_gift = re.search(r'(?m)^Event OnGift\(.*?^EndEvent', personal, re.S)
 check('script: OnGift skips a Trade hand-over', on_gift is not None and on_gift.group(0).find('TradeHandOver(') >= 0
       and on_gift.group(0).find('TradeHandOver(') < on_gift.group(0).find('RecordGift('))
 
-print(f'{fails} failed')
-sys.exit(1 if fails else 0)
+print(f'{checklib.fails} failed')
+sys.exit(1 if checklib.fails else 0)

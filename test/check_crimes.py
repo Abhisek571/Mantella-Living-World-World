@@ -16,15 +16,11 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import checklib  # noqa: E402
+from checklib import check  # noqa: E402
 HUB = os.path.join(os.path.dirname(ROOT), 'Mantella-Living-World-Hub', 'server')
 PERSONAL = open(os.path.join(ROOT, 'Source', 'Scripts', 'MLWW_Personal.psc'), encoding='utf-8').read()
-fails = 0
-
-
-def check(name, ok, detail=''):
-    global fails
-    print(('PASS ' if ok else 'FAIL ') + name + ('' if ok else f': {detail}'))
-    fails += not ok
 
 
 def func(name):
@@ -250,5 +246,5 @@ try:
 finally:
     shutil.rmtree(gen, ignore_errors=True)
 
-print(f'{fails} failed')
-sys.exit(1 if fails else 0)
+print(f'{checklib.fails} failed')
+sys.exit(1 if checklib.fails else 0)

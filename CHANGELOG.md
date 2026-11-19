@@ -2,6 +2,12 @@
 
 Every change to Mantella Living World - World. The Nexus page lists only the main changes for each version.
 
+## Unreleased
+
+### Changed
+- Code cleanup: long functions split into smaller steps, shared helpers for the offline checks, more offline tests. No change in game behaviour.
+- The plugin DLL built from this source has not been tested in game yet.
+
 ## 1.2.1 (2026-11-18)
 
 ### New
